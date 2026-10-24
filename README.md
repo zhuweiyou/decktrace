@@ -1,265 +1,144 @@
 # 斗地主记牌器（decktrace）
 
-> **Rust 重写进行中**：新 workspace 见 [`RUST.md`](RUST.md)。
-> Rust 版只发布 GUI 应用，`./start-gui.sh` 会打包并启动 `dist/decktrace.app`。
-> 下面的 Python 文档在迁移完成前继续有效。
+macOS 上的斗地主图像识别记牌器：持续截取目标窗口，识别画面中出现的牌，按“点数 + 花色”
+去重后，用置顶牌条展示剩余牌。
 
-通过窗口采集识别牌面，自动扣除自己的手牌和所有人出过的牌；底部记牌表或置顶 GUI 展示剩余牌。
-底牌只做“已见”标记，不提前扣除。
+采集、识别、游戏规则、UI 都是可替换的。当前默认实现面向微信小程序《JJ斗地主》。
 
-平台、游戏、识别来源、UI 都是可替换的；当前默认实现面向微信小程序《JJ斗地主》
-（`games/jj`），其他斗地主游戏通过新增 `GameProfile` 接入，业务层无需改动。
-
-当前 **macOS 完整可用**；Windows 已完成窗口枚举与架构预留，截图/采集后端待实现。
-
-## 架构
-
-目标是让 **平台、游戏、识别来源** 三件事互不影响：
-
-```text
-Platform（平台）
-  ├─ macos: ScreenCaptureKit 常驻采集 / screencapture 回退
-  └─ windows: 窗口枚举已实现，CaptureStream TODO
-
-GameProfile（游戏）
-  ├─ 窗口特征（标题/应用/尺寸）
-  ├─ 牌堆定义（每个点数几张、显示顺序、大小王标签）
-  ├─ 牌面模板目录与识别阈值
-  ├─ 底牌识别策略（区域/张数/稳定帧，或自定义实现）
-  └─ 自动重置规则
-
-DetectionSource（识别来源）
-  ├─ image: 平台采集流 + 模板识别
-  └─ memory: 预留（内存扫描/读牌），只需产出 DetectionBatch
-
-Core（业务，完全复用）
-  ├─ CardTracker：按“点数+花色”去重、计数
-  ├─ Runtime：消费 DetectionBatch、自动重置
-  └─ UI 抽象
-      ├─ TUI：Rich 表格，显示 fps/队列等调试信息
-      └─ GUI：Qt 置顶窗口，用固定 15×30 牌面左侧条展示剩余牌
-```
-
-### UI 抽象
-
-默认 UI 是 GUI；TUI 仅在调试/e2e 时通过 `--ui tui` 使用。
-
-`core/ui/` 只依赖 `TrackerSnapshot + GameProfile`：
-
-- `TuiRenderer`：Rich 表格，保留帧率、队列、识别耗时等调试信息。
-- `QtCardRenderer`：纯展示，一行牌面图片，不显示 fps；窗口默认置顶。
-- `CardFaceFactory`：读取 `games/<id>/assets/cards/<card_id>.png`，按原始 15×30
-  像素尺寸展示（最近邻，不放大）；不再用 PIL 字体兜底绘制，缺素材会直接报错。
-- 某点数剩余 4 张齐全、或双王都在时，对应牌条反色高亮；可用
-  `--no-highlight-bombs` 关闭。
-
-当前 GUI 使用项目所有者提供的 15×30 牌面左侧条素材（`games/jj/assets/cards`）。
-
-### 目录结构
-
-```text
-decktrace/
-├── cli.py                     # list / shot / watch / run / games
-├── core/
-│   ├── models.py              # WindowInfo / WindowSelector / Detection / DetectionBatch
-│   ├── source.py              # DetectionSource 抽象
-│   ├── deck.py                # 去重计数
-│   ├── table.py               # Rich 记牌表
-│   ├── runtime.py             # 通用运行时（不依赖平台/来源）
-│   └── ui/
-│       ├── base.py            # Renderer 抽象
-│       ├── tui.py             # Rich TUI
-│       ├── qt.py              # Qt 置顶牌面窗口
-│       ├── cards.py           # 牌面图片加载
-│       └── highlight.py       # 炸弹高亮判断
-├── platforms/
-│   ├── base.py                # WindowService / CaptureStream / Platform
-│   ├── factory.py             # 按 sys.platform 选择后端
-│   ├── macos/
-│   │   ├── window.py          # native/winlist.swift
-│   │   ├── sck.py             # ScreenCaptureKit 二进制帧客户端
-│   │   ├── capture.py         # SCK / screencapture 两条采集流
-│   │   ├── legacy.py          # 单帧 screencapture
-│   │   └── native/            # winlist.swift / sckcap.swift
-│   └── windows/
-│       ├── window.py          # ctypes EnumWindows（实验性）
-│       ├── capture.py         # TODO：CaptureStream 实现
-│       └── platform.py
-├── games/
-│   ├── base.py                # GameProfile / RecognitionConfig / ResetConfig
-│   ├── registry.py            # 游戏注册表
-│   └── jj/
-│       ├── profile.py         # 默认 jj profile（JJ 斗地主窗口/牌堆配置）
-│       ├── templates/         # 识别用点数/花色/大小王模板
-│       ├── assets/cards/      # GUI 用 15×30 牌面左侧条
-│       └── build_templates.py
-├── recognition/
-│   └── engine.py              # 通用模板识别引擎（读取 GameProfile）
-└── sources/
-    ├── image.py               # 图片识别来源（采集流 + recognizer）
-    ├── memory.py              # 内存来源 TODO
-    └── factory.py
-```
+- **纯 Rust**：ScreenCaptureKit 采集，无 Swift helper、无 Python 运行时
+- **置顶 GUI**：固定 15×30 像素牌条，炸弹反色，底牌叠加朱红“底”印章
+- **底牌开局门控**：识别到三张底牌后才开始记牌，避免发牌/翻牌动画误扣
+- **自动重置**：新手牌跳变或整体换牌时清空上一局
 
 ## 快速开始
 
-```bash
-cd /Users/yiyi/work/decktrace
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt \
-  -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-./start.sh
-```
-
-运行后：
-
-- `r`：重置本局
-- `q` / `Ctrl+C`：退出
-
-常用命令：
+要求：macOS 12.3+、Xcode Command Line Tools、Rust 1.88+。
 
 ```bash
-./start.sh games                         # 查看已注册游戏
-./start.sh list                          # 查看窗口
-./start.sh list --game jj                # 按游戏窗口特征标记
-./start.sh shot --out shots/now.png      # 单张截图
-./start.sh run --ui tui --debug          # TUI 实时记牌 + 标注图（调试/e2e）
-./start.sh run --once --debug            # 单帧自检
-./start.sh watch --interval 0.5          # 只采集、不识别
+# 打包并启动 dist/decktrace.app
+./start-gui.sh
+
+# 只打包
+./scripts/bundle-macos.sh
+
+# 开发时直接运行（会继承终端已有的屏幕录制权限）
+cargo run --release -p decktrace
 ```
 
-### GUI（默认，置顶牌面窗口）
+`decktrace.app` 的内部可执行文件名为 `decktrace`。首次通过 `.app` 启动时，macOS 会要求
+屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统音频录制。
 
-GUI 是默认 UI，需要额外安装 Qt：
+## 架构
 
-```bash
-.venv/bin/python -m pip install -r requirements-gui.txt   -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-./start.sh
+```text
+crates/
+  decktrace/                  # GUI 应用（egui），唯一发布产物
+  decktrace-session/          # 无 UI 运行时：采集→识别→状态机、自动重置
+  decktrace-core/             # 模型、牌堆规则、CardTracker、底牌门控
+  decktrace-game-spec/        # 游戏接入契约：GameProfile / BottomSpec
+  decktrace-game-jj/          # JJ 斗地主实现：窗口、牌堆、模板、牌面素材
+  decktrace-games/            # 游戏注册表
+  decktrace-recognition/      # 通用模板识别引擎
+  decktrace-capture/          # WindowService / CaptureStream / Platform trait
+  decktrace-capture-macos/    # ScreenCaptureKit 实现
+scripts/
+  bundle-macos.sh             # 生成 dist/decktrace.app
 ```
 
-- 窗口标题固定为“斗地主记牌器”
-- 固定窗口宽度，正好放下 54 张 15×30 牌条
-- 一行排列，牌条相邻、无间距
-- 默认窗口置顶：`--no-topmost` 可关闭
-- 不显示 fps/队列，只展示剩余牌
-- 三种牌面状态：正色=普通、蓝色=底牌（未出）、反色=炸弹/王炸
-- 底牌色优先于炸弹反色：即使该点数 4 张齐全，底牌仍保持蓝色
-- 炸弹/王炸反色高亮：`--no-highlight-bombs` 可关闭（只关闭反色，不影响底牌蓝色标记）
+数据流：
 
-TUI 只用于调试和 e2e，需要显式指定：
-
-```bash
-./start.sh run --ui tui                  # TUI 实时记牌
-./start.sh run --ui tui --duration 30    # 跑固定时长，便于 e2e 验证
+```text
+WindowService → CaptureStream → Session → CardRecognizer → CardTracker → GUI
 ```
 
-### 平台/采集后端
-
-```bash
-# 默认：自动选择 SCK，失败回退 screencapture
-./start.sh run
-
-# 强制 ScreenCaptureKit
-./start.sh run --capture-backend sck
-
-# 强制传统 screencapture
-./start.sh run --capture-backend legacy
-
-# 指定平台（Windows 采集目前会明确报 TODO）
-./start.sh list --platform windows
-```
-
-macOS 采集配置：
-
-```bash
-./start.sh run --capture-fps 15 --capture-quality 0.88
-```
-
-## 当前性能
-
-- 常驻 ScreenCaptureKit：配置 15fps，实测约 **13.6–14fps**
-- 双王确认后识别单帧约 **15–25ms**
-- 未确认双王时大小王隔帧检测，约 **95ms/帧**
-- 队列只保留 3 帧，延迟约 **0.1–0.3s**
-- Rich 表格每 0.12s 刷新一次
-- GUI 更新只重绘牌条，不显示 fps
-
-采集与识别线程分离；识别慢不会拖慢采集，队列满会丢最旧帧。
+- `decktrace-session` 不依赖 clap/crossterm/egui。
+- `decktrace-game-spec` 只定义游戏契约；`decktrace-game-jj` 才是具体游戏实现。
+- 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
 
 ## 识别规则
 
-1. 用颜色掩码找红色/黑色花色候选；
+1. 用 red/dark 颜色掩码找花色候选；
 2. 花色正上方必须存在点数；
-3. 点数和花色都通过模板匹配；
+3. 点数、花色都用二值模板做 IoU 匹配；
 4. 周围必须是浅色卡面；
-5. 底牌识别由游戏 profile 提供；连续多帧稳定识别到约定的底牌张数，才认为游戏开始。
-   开局前（发牌、翻牌动画、底牌没认全）的所有检测都不入账；开局后底牌仍计入剩余，
-   只有真正出现在出牌区才扣除。
+5. 大小王没有花色，用 JOK 模板在高度带内粗搜索 + 局部 CCOEFF 精验。
 
-所以积分、倍数、排名、倒计时、顶部记牌器数字都不会被当成牌。
+牌的身份是 `点数 + 花色`（如 `AH`、`10S`、`BJ`、`SJ`），同一张牌只扣一次。
 
-牌的身份是 `点数+花色`（如 `AH`、`10S`、`BJ`、`SJ`），同一张牌只扣一次。
-底牌在顶部展示时不会扣剩余张数；等这张牌真正打出（出现在非底牌区）后才扣除。
+### 底牌门控
+
+- 底牌识别由游戏 profile 提供：`GameProfile.bottom`（`BottomSpec`）。
+- JJ 使用固定区域 `(0.33, 0.08, 0.47, 0.20)`，需要连续稳定识别到 3 张底牌才 `armed=True`。
+- 底牌出现前，手牌、翻牌动画、中间大牌检测一律不记账。
+- 底牌仍计入剩余；只有真正打出（出现在非底牌区）后才扣除。
+- GUI 中底牌在牌面底部叠加 9×9 朱红“底”印章（距底 2px），不改变牌面本身。
+
+### 炸弹提示
+
+- 某点数 4 张齐全，或大小王都在时，该组牌反色显示。
+- 底牌印章叠加在反色/正色之上，不受影响。
+
+## 性能
+
+release、1800×1100：
+
+- 不做大小王搜索：约 **8–10ms/帧**
+- 做大小王搜索：约 **16–25ms/帧**
+- 大小王都已有下落后，运行时自动跳过王搜索
+- 采集目标 15fps
+
+分段计时：
+
+```bash
+DECKTRACE_TIMING=1 cargo run --release -p decktrace
+```
+
+实现要点：
+
+- red/dark/combined 一次并行扫描
+- 行程编码（RLE）+ 两趟并查集的连通域
+- 缩小图 CCOEFF 选候选，再局部全分辨率精验
+- 普通牌识别与大小王识别并行
 
 ## 换游戏
 
-新增一个游戏只需要：
+新建一个游戏 crate：
 
-1. 新建 `decktrace/games/<id>/profile.py`，定义 `GameProfile`：
-   - 窗口标题/应用名
-   - `rank_totals`、`display_ranks`、`labels`
-   - 识别模板目录、大小王模板/区域
-   - 底牌识别：`bottom=BottomConfig(region=..., count=..., stable_frames=...)`；
-     没有底牌概念的游戏设 `bottom=None`，也可以自定义实现 `BottomSpec`
-   - 自动重置的手牌区域与阈值
-2. 放入对应牌面模板到 `games/<id>/templates/`（或复用现有模板）；
-3. 在 `games/registry.py` 注册；
-4. 如果窗口/采集方式有平台差异，只改对应 `platforms/<platform>/`。
+1. `crates/decktrace-game-xxx`
+2. 实现 `GameProfile`：窗口特征、牌堆、模板目录、牌面素材、底牌策略、重置规则
+3. 在 `crates/decktrace-games` 注册表加一行
 
-业务层（去重、计数、TUI、自动重置框架）不需要改。
+没有底牌概念的游戏把 `bottom` 设为 `None`，tracker 会直接开始记牌。
+底牌识别方式不是通用的：可以实现自己的 `BottomSpec`。
 
-## 换识别来源（例如内存读牌）
+## 打包
 
-实现 `DetectionSource`：
+`scripts/bundle-macos.sh` 会：
 
-```python
-class MemoryDetectionSource(DetectionSource):
-    def start(self): ...
-    def read(self, timeout): return DetectionBatch(...)
-    def stop(self): ...
-    def stats(self): ...
-```
+- 构建 `decktrace` release 二进制
+- 生成 `dist/decktrace.app/Contents/MacOS/decktrace`
+- 拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`
+- 写入 `Info.plist`（含 `NSScreenCaptureUsageDescription`）
+- 做本机 ad-hoc 签名
 
-把 `DetectionBatch.detections` 填成 `Detection(rank, suit, score, box)` 即可；`meta={"new_round": True}` 可以通知运行时重置。`core/deck.py`、`core/runtime.py`、`core/table.py` 全部复用。
-
-## Windows 状态
-
-- `platforms/windows/window.py` 已用 ctypes 实现窗口枚举（实验性，未在 Windows 实机验证）。
-- `platforms/windows/capture.py` 是明确的 TODO：保留 `CaptureStream` 接口，后续接 Windows Graphics Capture / PrintWindow / ImageGrab。
-- 在 Windows 上运行截图/实时记牌会得到明确的“后端尚未实现”错误，不会静默失败。
+正式分发需要 Developer ID 签名和公证。
 
 ## 测试
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+cargo test --release --workspace
 ```
 
-覆盖：牌堆去重、帧内去重、三张底牌开局门控、底牌不提前扣除、底牌打出后扣除、无底牌游戏不门控、自动重置正反例、真实截图识别、底牌大小王、窗口选择、游戏注册表、炸弹/底牌配色优先级。
+- 牌堆、底牌门控、自动重置：`crates/decktrace-game-jj/tests/tracker.rs`
+- 真实截图识别回归：`crates/decktrace-recognition/tests/golden.rs`
+- 连通域随机 mask 对拍：`engine::tests`
 
-> 开局时所有点数都可能有 4 张剩余，因此整排都会反色；这是“可能存在炸弹”的字面结果。
-> 如果只想看少量高亮，后续可以增加“剩余牌总数低于阈值才高亮”的策略。
+截图回归依赖仓库根目录的 `shots/`；样本缺失时自动跳过。把真实牌局截图放进 `shots/`
+即可本地启用。
 
 ## 已知限制
 
-- 窗口最小化后无法采集；完全遮挡时系统可能降低刷新率，建议保持游戏窗口可见。
-- 程序从一局中间启动时，无法补回启动前已经出过的牌；请在发牌/开局前启动，或按 `r` 重置。
-- 默认 `jj` profile 按标准 54 张、每点数 4 张计算；特殊模式需要新 profile。
-- 模板与游戏皮肤绑定；换字体/皮肤后运行：
-
-  ```bash
-  .venv/bin/python -m decktrace.games.jj.build_templates
-  ```
-
-- Windows 截图尚未实现；macOS 需要屏幕录制权限。
+- 仅实现 macOS 采集；Windows 保留 trait，尚未实现
+- 程序从一局中间启动时，无法补回启动前已经出过的牌
+- 模板与当前游戏字体/皮肤绑定，换皮肤需要更新模板和素材
+- `.app` 首次运行需要手动授予屏幕录制权限

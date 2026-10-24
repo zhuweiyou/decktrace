@@ -1,487 +1,160 @@
-# AGENTS.md — 本项目的工作方式与调试经验
+# AGENTS.md — decktrace 开发约定
 
-本文件记录在 `decktrace`（斗地主记牌器）中已经验证过的开发流程、调试方法和踩坑经验。
-后续 Agent 修改本项目时，优先遵循这里的做法；如果发现更好的方案，先验证，再更新本文件。
+本项目是 macOS 上的斗地主图像识别记牌器，Rust 实现。后续 Agent 修改时优先遵循这里的约定；
+发现更好的方案，先验证，再更新本文件。
 
----
+## 1. 产品约束
 
-## 1. 项目目标与不可破坏的约束
-
-目标：持续截取斗地主游戏窗口（当前默认实现为微信小程序《JJ斗地主》），识别画面中出现的牌，
-按“点数 + 花色”去重后，通过 TUI 或 GUI 展示剩余牌。平台、游戏、识别来源、UI 都必须可替换。
-
-必须保持的产品约束：
-
-1. **只有“点数/字母下方有花色”的才算牌。**
-   - 积分、倍数、排名、倒计时、顶部记牌器数字都是纯数字，不能入账。
-2. **同一张牌只能扣一次。**
-   - 牌的物理身份是 `点数 + 花色`（例如 `AH`、`10S`、`BJ`、`SJ`）。
-   - 手牌、底牌在顶部的参考展示、自己/他人出过的牌，可能在不同帧、不同位置重复出现。
+1. **只有“点数/字母下方有花色”的才算普通牌。**
+   - 积分、倍数、排名、倒计时、顶部记牌器数字不能入账。
+2. **同一张牌只扣一次。**
+   - 物理身份是 `点数 + 花色`（`AH`、`10S`、`BJ`、`SJ`）。
+   - 手牌、底牌展示、出牌区可能在不同帧/位置重复出现。
 3. **底牌识别到齐，才算游戏开始。**
-   - 底牌区空着、背面、或没认全，都说明还没发完牌/还没决出地主；
-     这之前的手牌、翻牌动画、中间大牌检测一律不记账。
-   - 底牌可见 ≠ 已出：底牌仍计入剩余，只有它真正出现在出牌区后才扣除。
-4. **采集不能因为识别慢而变慢。**
-   - 截图线程只负责截图/入队；识别在工作线程消费。
+   - 底牌区为空、背面或没认全时，所有排除都不算数。
+   - 底牌可见 ≠ 已出：底牌仍计入剩余，只有真正打出后才扣除。
+4. **采集不能被识别拖慢。**
+   - ScreenCaptureKit 回调只负责入队；识别消费最新帧，队列满丢旧帧。
 5. **没有真实画面验证，不算完成。**
-   - 必须实际截图、画框、打印识别结果，并在真实牌局帧上复核。
+   - 必须实际截图/启动 GUI，确认识别和显示结果。
 
----
-
-## 2. 推荐开发流程
-
-### 第一步：先打通环境与窗口
-
-- 确认 macOS 屏幕录制权限。
-- 用窗口枚举找到目标窗口，而不是猜坐标。
-- 先跑单帧截图，打开图片确认内容、Retina 比例、窗口是否被遮挡。
-
-本项目对应命令：
-
-```bash
-./start.sh list
-./start.sh shot --out shots/check.png
-./start.sh run --once --debug
-```
-
-### 第二步：先做最小闭环，不要一上来写全套
-
-顺序应为：
+## 2. 仓库结构
 
 ```text
-窗口发现 → 单帧截图 → 保存图片 → 人眼确认
-        → 单帧识别 → 标注框 → 打印分数
-        → 模块化 → 连续采集 → 去重/计数 → 终端表格
+crates/
+  decktrace/                  # GUI 应用（egui），唯一发布产物；二进制 decktrace
+  decktrace-session/          # 无 UI 运行时：Session、自动重置
+  decktrace-core/             # 模型、DeckRules、CardTracker、底牌门控
+  decktrace-game-spec/        # GameProfile / BottomSpec 契约
+  decktrace-game-jj/          # JJ 实现：profile、templates、cards
+  decktrace-games/            # 注册表
+  decktrace-recognition/      # 模板识别
+  decktrace-capture/          # 平台 trait
+  decktrace-capture-macos/    # ScreenCaptureKit
+scripts/bundle-macos.sh       # 打包 decktrace.app
+start-gui.sh                  # 打包并启动
 ```
 
-每一步都要有可见产物：
+规则：
 
-- `frames/latest.jpg`（或 png）：输入
-- `frames/annotated.png`：识别框
-- 终端/`state.json`：识别结果与计数
-- 测试：固定样本的期望结果
+- 每个游戏一个独立 crate：`decktrace-game-xxx`。不要把具体游戏塞进通用层。
+- 通用层只依赖 `GameProfile` / `BottomSpec` 契约。
+- 发布产物只有 GUI，不提供 TUI 二进制。
 
-### 第三步：用真实截图建模板，不靠想象
-
-- 从真实牌局里裁剪点数/花色，保存为二值模板。
-- 手牌、出牌区、底牌栏的牌大小可能不同，甚至**纵横比**不同。
-- 每个模板至少在一张真实截图上验证过，再进入代码。
-
-### 第四步：先让单张图 100% 正确，再上实时管线
-
-- 在 `shots/` 里保留典型样本：手牌、底牌、出牌区、大小王、结算画面。
-- 单帧识别结果和人工标注逐张对照。
-- 单帧稳定后，再接入线程、队列、自动重置。
-
-### 第五步：最后做状态与体验
-
-- 去重、pending 确认、自动重置、表格刷新、状态文件。
-- 加单元测试和真实截图回归测试。
-- 更新 README、依赖、启动脚本。
-
----
-
-## 3. 调试逻辑：从现象到根因
-
-遇到“没识别/误识别”时，按下面顺序定位，不要直接改阈值。
-
-### 3.1 先固定失败输入
+## 3. 开发命令
 
 ```bash
-./start.sh shot --out shots/failure.png
+cargo test --release --workspace
+cargo run --release -p decktrace
+./start-gui.sh                 # 打包并打开 dist/decktrace.app
+./scripts/bundle-macos.sh      # 只打包
 ```
 
-保存失败帧，后续所有分析都基于同一张图，避免画面变化导致误判。
+识别/性能验证必须用 release。debug 下模板匹配和连通域会慢一个数量级。
 
-### 3.2 把中间结果可视化
-
-至少输出：
-
-- 所有检测框和标签（`annotate`）
-- 每个候选的 rank score / suit score / face score
-- 花色候选框、点数框
-- 颜色掩码图
-
-如果只看最终列表，很容易把“没找到花色”“找到花色但点数分类错”“被 NMS 去掉”混为一谈。
-
-### 3.3 分层排查
-
-按管线顺序逐层问：
-
-1. **颜色掩码**：目标像素在 red/dark mask 里吗？
-2. **花色候选**：bbox、aspect、fill 是否通过？
-3. **点数定位**：花色上方是否找到 rank bbox？bbox 是否被卡牌边框污染？
-4. **分类**：模板尺度/比例是否匹配？分数多少？第二名多少？
-5. **卡面校验**：周围是否浅色卡面？
-6. **去重/NMS**：是否被位置去重或帧去重吃掉了？
-7. **状态层**：是否已经入账、是否被自动重置清掉？
-
-### 3.4 用数字定位，而不是“看起来差不多”
-
-- 打印 `matchTemplate` 的 max score。
-- 打印 top-2 分数和差值。
-- 打印 bbox 尺寸、aspect、scale。
-- 对同一目标比较不同尺度/不同模板的分数。
-
-小王漏识别时，最终定位到：
+## 4. 识别管线
 
 ```text
-手牌模板 41x130，底牌栏实际 JOK 约 27x46
+red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点数
+→ 点数/花色模板 IoU → 卡面亮度校验 → 同一帧 NMS → 大小王搜索 → 底牌标记
 ```
 
-不是阈值问题，是**纵横比不同**，单纯缩放模板解决不了。
+- 掩码：red 与 dark 一次并行扫描，同时产出 combined。
+- 连通域：行程编码（RLE）+ 两趟并查集。修改后必须跑 `engine::tests` 的随机 mask 对拍。
+- 点数/花色：点数框归一化到 70px 高，再与模板做 IoU；上采样用 nearest。
+- 大小王：高度带 + 多尺度，先 1/4 缩小图 CCOEFF 选候选，再全分辨率局部 CCOEFF 精验。
+- 性能：无王搜索约 8–10ms/帧，含王搜索约 16–25ms/帧。双王都有下落后跳过王搜索。
 
-### 3.5 最小修复，再做回归
-
-修复只改一个变量/一个分支，然后：
-
-- 重跑失败样本，确认修复；
-- 重跑全部历史样本，确认没有新增误检；
-- 跑单元测试；
-- 做一次实时运行，观察 fps、队列、错误数。
-
----
-
-## 4. 图像识别经验
-
-### 4.1 先找花色，再找点数
-
-这是排除 UI 数字的核心，不要改成“全图 OCR 数字再过滤”。
-
-```text
-红色/黑色连通块 → 形态像花色 → 上方找点数 → 点数/花色模板匹配 → 浅色卡面校验
-```
-
-### 4.2 模板归一化到固定高度，而不是把模板缩到很小
-
-手牌、出牌区、底牌栏的牌大小不同。正确做法：
-
-- 从花色上方提取点数 bbox；
-- 按 bbox 高度归一化到固定高度（本项目 70px）；
-- 与同样高度的模板比较（IoU/NCC）。
-
-早期把 70px 模板直接缩到 26px 去匹配，导致 5/6 混淆；改成“点数框归一化”后 50 张样本全对。
-
-### 4.3 花色用颜色 + 形状双重校验
-
-- 红色：红心/方块；黑色：黑桃/梅花。
-- 花色候选过滤：宽高比、填充率、面积。
-- 花色分类：归一化到固定画布后和 4 个花色模板比 IoU。
-- 红色花色的黑色描边可能形成“伪黑色花色”，必须按位置去重并选分数更高的候选。
-
-### 4.4 卡面背景校验
-
-真牌的点数/花色周围是浅色、低饱和卡面；UI 按钮、头像、蓝色背景不是。
-加一个 `face_fraction`（低饱和高亮像素比例）能过滤大量误检。
-
-### 4.5 特殊牌要特殊处理
-
-- 大小王没有花色，不能用普通牌规则。
-- 牌面是竖排 `JOK` + `大/小`。
-- 用竖排文字模板检测，红/黑颜色区分大王/小王。
-- **底牌栏的小王是压缩绘制**：手牌模板比例 41x130，底牌实际约 27x46，必须单独提取紧凑模板。
-- 紧凑模板只搜索底牌栏高度带；手牌/出牌区也按高度带搜索，避免全图多尺度匹配。
-
-### 4.6 不要做全图多尺度滑窗
-
-`cv2.matchTemplate` 全图 × 多模板 × 多尺度会非常慢。
-优先“找锚点（花色）→ 在锚点上方的小裁剪区分类”；只对大小王这种没有花色的牌做模板搜索，并限制 ROI/尺度。
-
-### 4.7 模板与皮肤绑定
-
-模板来自当前小程序字体/皮肤。游戏更新后如果字体变了，需要重新抓样本并运行：
+调试：
 
 ```bash
-.venv/bin/python -m decktrace.games.jj.build_templates
+DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
----
+真实截图回归在 `crates/decktrace-recognition/tests/golden.rs`，依赖根目录 `shots/`；
+样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
-## 5. 去重与计数
+## 5. 底牌门控
 
-### 5.1 以物理牌 ID 去重
+- 底牌识别是游戏能力：`GameProfile.bottom: Option<Arc<dyn BottomSpec>>`。
+- JJ 使用 `BottomConfig(region=(0.33,0.08,0.47,0.20), count=3, stable_frames=2)`。
+- `CardTracker` 在 `armed=false` 时忽略所有排除，只收集底牌区检测。
+- 连续 stable_frames 帧出现同样的 count 张底牌后开局；大小王隔帧检测允许中间少一张。
+- 开局那一帧跳过底牌动画残影。
+- 开局后底牌仍计入 remaining；打出/进入手牌后从 `bottom_ids` 移除。
+- 没有底牌概念的游戏设 `bottom=None`，tracker 一开始就是 armed。
 
-```text
-card_id = rank + suit
-```
+## 6. GUI 约定
 
-不要按“每帧看到几张”累加，否则手牌会反复扣。
-底牌在顶部展示、又出现在手牌里时，同一 ID 只算一次。
+- 牌面固定 15×30，不缩放；窗口宽度固定 54 张 + 边距。
+- 炸弹：某点数剩余 4 张齐全，或双王都在，整组反色。不要改成第三种底色。
+- 底牌：不改变牌面底色，在牌面底部居中叠加 9×9 朱红“底”印章，距底 2px。
+- 底牌印章绘制在反色/正色之后，优先级最高。
+- 印章素材：`crates/decktrace/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入二进制。
+- 窗口置顶、不可缩放；标题为“斗地主记牌器”。
 
-### 5.2 同一帧内先按 ID 去重
+## 7. macOS 采集与打包
 
-同一张牌可能在同一帧出现两次（底牌栏 + 手牌）。如果直接累加 pending hits，一帧就凑满 2 次确认。
-正确顺序：
+- 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
+- `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
+  - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
+  - `capture-macos/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
+  这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
+- 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
+- 打包脚本会拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`。
+- `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
+- 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
+- 正式分发需要 Developer ID 签名和公证；当前脚本只是 ad-hoc 签名。
 
-```text
-帧内按 card_id 取最高分 → 再进入跨帧 pending → 达到 min_hits/高置信度才入账
-```
-
-### 5.3 稳定性确认
-
-- 默认 `min_hits=2`：低分牌需要连续两帧确认。
-- 高置信度（约 >=0.92）可以立即入账。
-- pending 超过 TTL 未再出现则丢弃。
-- 这是为了过滤动画残影和偶发误检。
-
-### 5.4 标准牌堆假设
-
-当前按标准 54 张：每个点数 4 张，大小王各 1 张。
-如果遇到多副牌/特殊赛事牌堆，必须显式调整 `RANK_TOTALS`，不要默默沿用。
-
-### 5.5 底牌识别与开局门控
-
-- 底牌识别是**游戏能力**，不是通用引擎常量：`GameProfile.bottom`（`BottomSpec`）。
-  - `jj` 使用 `BottomConfig(region=(0.33, 0.08, 0.47, 0.20), count=3,
-    stable_frames=2)`，区域来自真实截图；通用识别引擎只调用 `bottom.mark()`。
-  - 没有底牌概念的游戏设 `bottom=None`，tracker 一开始就 `armed`，不门控。
-  - 其他游戏可以换 region/count/stable_frames，或自定义实现 `BottomSpec`。
-- `CardTracker` 在 `armed=False` 时忽略**所有排除**：发牌、翻牌动画、中间放大的牌、
-  手牌都不入账；只收集底牌区检测。
-- 连续 `stable_frames` 帧都能识别到 `count` 张底牌，才 `armed=True` 并写入
-  `bottom_ids`。大小王隔帧检测会导致中间某帧少一张，按最近 4 帧内重复出现判断，
-  不要求严格连续。
-- `armed` 后：`bottom_ids` 仍计入 `remaining`，手牌/出牌正常扣除；底牌真正打出
-  （或进入自己手牌）时从 `bottom_ids` 移除。开局那一帧的底牌动画残影跳过。
-- GUI 三种状态优先级：**底牌（蓝） > 炸弹（反色） > 普通（正色）**；
-  即使某点数 4 张齐全，底牌仍必须保持蓝色。
-- 测试必须覆盖：底牌未齐时不记账、凑齐后开局、大小王隔帧底牌、底牌不扣、
-  底牌打出后扣、无底牌游戏不门控、炸弹中底牌仍为底牌色。
-
----
-
-## 6. 自动重置
-
-新一局必须清空上一局的已见牌。已验证两个信号：
-
-1. **手牌张数跳变**：手牌从 <=5 张突然到 >=15 张（结算后重新发牌）。
-2. **手牌整体换掉**：当前手牌与上一帧手牌重合度 <60%。
-
-正常出牌时，当前手牌是上一帧的子集，重合度接近 100%，不会误重置。
-新一局随机发牌期望重合度约 30%，会触发。
-
-注意：
-
-- 手牌离开画面超过约 1.5 秒，才把“上一帧手牌数”视为 0，避免识别抖动导致误判。
-- 重置后同一帧的新手牌仍要正常入账。
-- 自动重置必须打印原因（跳变/重合度、清空前已识别数），方便回看。
-- 始终保留 `r` 手动重置作为兜底。
-
-测试必须同时覆盖：
-
-- 新手牌 → 重置
-- 出牌后手牌变少 → 不重置
-
----
-
-## 7. 采集/识别并发
-
-已采用结构：
-
-```text
-Platform.CaptureStream ──RawFrame(BGR)──> ImageDetectionSource
-                                              │  (图片模板识别，3 帧队列)
-                                              ▼
-                                     DetectionBatch
-                                              │
-                                              ▼
-                                  Core Runtime（去重/自动重置）
-                                              │
-                              ┌───────────────┴───────────────┐
-                              ▼                               ▼
-                     TuiRenderer（调试/e2e）         QtCardRenderer（默认 UI）
-                     （fps/队列/表格）              （置顶 54 张牌条，无 fps）
-```
-
-原则：
-
-- 平台只负责窗口和 `CaptureStream`；macOS 用常驻 ScreenCaptureKit，Windows 采集 TODO。
-- 识别来源只负责产出 `DetectionBatch`；未来内存读牌实现同一接口即可。
-- Runtime 不 import macOS/Windows，也不 import Qt/Tk。
-- UI 只消费 `TrackerSnapshot + GameProfile`；TUI 才显示 fps/队列。
-- GUI 素材按固定 15×30 展示，不缩放；炸弹/王炸反色。
-- 默认不再每帧启动 `screencapture`，而是启动一次 ScreenCaptureKit helper。
-- helper 通过 stdout 发送 `SCK1 + seq + ts + w + h + size + JPEG`，Python 直接解码，不经过磁盘。
-- 队列要小（3 帧左右）；识别跟不上时丢最旧帧，保持低延迟。
-- 共享状态用锁；UI 只读快照。
-- 退出时设置 stop event、join 采集/识别/键盘线程、关闭 UI、恢复终端。
-
-指标要可见：采集 fps、识别耗时、队列长度、丢帧、错误数、自动重置次数。
-
----
-
-## 8. macOS 截图专项
-
-- macOS 15+ 已移除 `CGWindowListCreateImage`，本项目用：
-
-  ```bash
-  /usr/sbin/screencapture -x -o -l <windowID> -t png out.png
-  ```
-
-- **`screencapture` 不能写入以 `.` 开头的隐藏临时文件**。
-  临时文件名不要加前导点，否则会报 `cannot write file to intended destination`。
-- 窗口 ID 会变化；按标题/应用名重新查找，失败时清空缓存重试。
-- Retina 截图是逻辑尺寸的 2x；用 `image_width / window.width` 计算 scale。
-- 窗口最小化无法截图；被其他窗口遮挡通常能截到内容，但完全遮挡时系统可能降低刷新率。
-- 屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统音频录制；授权后重启终端应用。
-- legacy PNG 单帧约 140ms，JPEG 单帧约 95ms、解码约 5ms。
-- 默认常驻 ScreenCaptureKit helper：15fps 配置实测约 13.6fps；JPEG 解码约 4.5ms，采集不再有每帧进程启动成本。
-- 识别端未确认双王时大小王隔帧检测（约 95ms/帧），双王确认后约 15ms/帧；队列 3，延迟约 0.1–0.3s。
-- 如果要继续提速，先看识别单帧耗时和队列；不要再回到“每帧 screencapture”的方案。
-
----
-
-## 9. 测试与验证
-
-### 必跑
+## 8. 测试与验收
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+cargo test --release --workspace
 ```
 
-当前测试覆盖：
+覆盖：
 
-- 跨帧确认
-- 单帧重复牌不重复计数
-- 高置信度立即入账
-- 同点数 4 张扣完
-- 手动重置
-- 自动重置正例/反例
-- 真实截图识别（手牌 + 底牌 + 出牌区 + 大王）
-- 底牌栏压缩小王、真实底牌大王、大王颜色分支回归
-- 三张底牌开局门控、底牌不提前扣除、底牌打出后扣除、无底牌游戏不门控、
-  底牌色优先于炸弹反色
-- 炸弹/王炸高亮判断
+- 跨帧确认、高置信度立即入账、帧内去重
+- 底牌未齐不记账、凑齐后开局、大小王隔帧
+- 底牌不扣、打出后扣、无底牌游戏不门控
+- 手动/自动重置正反例
+- 真实截图 golden 回归
+- RLE 连通域随机 mask 对拍
 
-### 真实截图回归
-
-`tests/test_recognition.py` 依赖 `shots/` 样本；样本缺失时 `skipUnless`。
-修改识别逻辑后，至少确认：
-
-- 期望牌集合完全一致；
-- 不出现积分/排名等伪牌；
-- 大小王数量正确；
-- 识别耗时没有明显退化。
-
-### 手工验收
+手工验收：
 
 ```bash
-./start.sh run --once --debug
-open frames/annotated.png
+./start-gui.sh
 ```
 
-GUI 验收（默认 UI，直接启动）：
+检查：
 
-```bash
-./start.sh
-```
+- 窗口标题“斗地主记牌器”，置顶、不可缩放
+- 牌条 15×30 相邻排列
+- 炸弹组反色
+- 底牌底部有朱红“底”印，不遮住主要点数
+- 等待底牌时显示全部 54 张，不提前扣牌
 
-检查：窗口标题为“斗地主记牌器”、54 张牌条能放进固定窗口、牌条相邻无间距、置顶、
-某点数 4 张剩余时反色；底牌显示为蓝色，且底牌所在点数即使凑满 4 张也仍是蓝色，
-不被炸弹反色覆盖。
-
-TUI/e2e 验收（显式指定，不改变默认 UI）：
-
-```bash
-./start.sh run --ui tui --duration 30 --debug
-```
-
-看框是否套在牌上，尤其检查：
-
-- 手牌最左/最右
-- 底牌栏小王
-- 中心出牌区
-- 顶部数字/积分区域（应无框）
-
----
-
-## 10. 代码与工程约定
-
-- 中文注释/文档，英文标识符。
-- 应用展示名统一使用 `decktrace.APP_NAME`（斗地主记牌器），用于窗口标题、TUI 标题和
-  CLI 描述；游戏名只放在 `GameProfile.name`，不要写死到 UI 或窗口标题里。
-- 终端表格用 Rich；0 留空，剩余越多颜色越深，不要再用 ANSI 手工 pad 对齐。
-- UI 通过 `core/ui/Renderer` 抽象：TUI 和 GUI 只消费 `TrackerSnapshot + GameProfile`；
-  不要把画面渲染、fps 状态塞进 runtime 或识别来源。
-- 默认 UI 是 GUI（纯牌面展示，不显示调试数据）；TUI 只在调试/e2e 时用
-  `--ui tui` 启动，保留 fps/队列/识别耗时。
-- GUI 牌面三种状态：普通（正色）、底牌（蓝色着色）、炸弹/王炸（反色）；
-  底牌优先级最高，底牌色实现在 `CardFaceFactory.image(bottom=True)`。
-- GUI 牌面素材在 `games/<id>/assets/cards/<card_id>.png`；`jj` profile 使用用户提供的
-  15×30 左侧牌条，按原始像素尺寸展示，不放大。
-- 牌面只用图片素材，不再保留 PIL 字体绘制兜底；缺素材直接报错，由测试保证 54 张齐全。
-- 底牌识别必须通过 `GameProfile.bottom` 注入；通用 recognition/tracker 不写死
-  底牌区域、张数或识别方式。开局门控只依赖 `BottomSpec.count/stable_frames`。
-- 炸弹高亮规则：某点数剩余 4 张齐全或双王都在时反色；开局全 4 张会导致整排反色，
-  这是字面结果，可用 `--no-highlight-bombs` 关闭。
-- GUI 依赖 Qt（PySide6）为可选依赖，放在 `requirements-gui.txt`；TUI 不需要 Qt。
-- 识别、计数、采集、管线分模块，不把所有逻辑塞进一个文件。
-- 数据类用 `dataclass`；状态快照不可变或复制后传出。
-- 原子写文件；调试产物不要污染源码目录。
-- 新增依赖同步更新 `requirements.txt`；启动入口 `start.sh` 优先使用 `.venv`。
-- 可选重依赖（cv2/numpy）不要放进截图模块的顶层导入，保证没有 venv 时 `list/shot/watch` 仍可运行。
-- 注意 numpy 标量不能直接 `json.dumps`；写 JSON 前 `int()`/`float()`。
-- 后台进程要能优雅退出；不要留下占用 `frames/state.json` 的残留进程，也不要在用户正在运行时抢占其输出文件。
-
----
-
-## 11. 已踩过的坑（速查）
+## 9. 已知坑
 
 | 现象 | 根因 | 修复 |
 | --- | --- | --- |
-| `screencapture` 写文件失败 | 临时文件名以 `.` 开头 | 去掉前导点 |
-| 5 和 6 混淆 | 模板被缩小到很小，细节丢失 | 点数额归一化到固定高度再比 |
-| 积分/排名被当牌 | 直接识别数字 | 先花色、再点数、卡面校验 |
-| 小王漏识别 | 底牌栏 JOK 被压缩，纵横比不同 | 增加紧凑模板 + 上部 ROI |
-| 同一张牌一帧确认两次 | 底牌 + 手牌同帧重复 | 帧内按 card_id 去重 |
-| 开局底牌被提前扣掉 | 底牌可见被当成已出 | 三张底牌确认前不记账；之后只记 `bottom_ids` 不扣剩余 |
-| 底牌被炸弹反色盖住 | 反色优先级高于底牌色 | 状态优先级改为底牌 > 炸弹 > 普通 |
-| 翻牌动画/发牌被误扣 | 底牌没认全就开始记牌 | `armed=False` 时忽略所有排除，三张底牌稳定出现后才开局 |
-| 新一局没清空 | 只看重合度，偶发失败 | 加手牌张数跳变信号 + 手动 r |
-| 表格错位 | ANSI 颜色码参与宽度计算 | 先 pad 再加颜色 |
-| JSON 崩溃 | numpy int64 不可序列化 | 写 JSON 前转 int |
-| 退出后终端不回显 | cbreak 输入线程未 join | 退出时 join 并恢复 termios |
-| 识别越来越慢 | 全图多尺度模板搜索 | 锚点 + 高度带/小 ROI + 限制尺度 |
-| 2fps 上不去 | 大小王全图 8 尺度匹配 + 每帧启动 screencapture | 分带 3–4 尺度 + 常驻 ScreenCaptureKit 二进制流 |
-| 文件读写延迟 | 每帧写 latest 再读 | 常驻进程 stdout 二进制帧，Python 直接解码 |
-| 队列延迟 1s | 队列 12 且识别 10fps | SCK 队列降到 3，丢旧帧保最新 |
-| GUI 牌面丑/间距大 | 自己画牌面 + 动态缩放 | 用户提供的 15×30 牌条 + 固定窗口 + 相邻排列 |
-| 开局全部反色 | 4 张齐全就高亮，开局所有点数都齐全 | 保留开关；如需更少高亮，增加剩余总数阈值 |
+| dyld 找不到 libswift_Concurrency | 最终二进制没有 Swift runtime rpath | 保留 `.cargo/config.toml` 的 rpath |
+| `.app` 里模板/牌面丢失 | 资源路径是编译期绝对路径 | `asset_root()` 解析 `Contents/Resources` |
+| 翻牌动画被误扣 | 底牌没认全就开始记牌 | `armed=false` 忽略所有排除 |
+| 开局前手牌被计入 | 同上 | 三张底牌稳定后才开局 |
+| 底牌被提前扣除 | 把底牌区当普通检测 | 底牌单独 `bottom_ids`，不扣剩余 |
+| 大小王漏检 | 底牌栏压缩字形/尺度不同 | 紧凑模板 + 高度带 + 多尺度 |
+| 识别慢 | 全图多尺度模板搜索 | 高度带 + 缩小图选候选 + 局部精验 |
+| 8 连通统计错误 | 通用逐像素 union-find 慢/易错 | RLE 两趟并查集 + 随机 mask 对拍 |
+| `.app` 首次启动无画面 | 没授权屏幕录制 | 系统设置授予权限后重启 |
+| GUI 资源找不到 | 只拷贝了二进制，没拷贝 assets | 用 `scripts/bundle-macos.sh` |
 
----
+## 10. 完成标准
 
-## 12. Rust 重写（rust-rewrite 分支）
-
-- 新代码在 Cargo workspace：`crates/`（`decktrace-session` 为无 UI 运行时，`decktrace-game-spec` 为游戏契约，
-  `decktrace` 为唯一 GUI 应用），Python 版保留作识别 oracle。
-- 游戏必须独立成 crate：`decktrace-game-jj` 只是 JJ；新增游戏新建
-  `decktrace-game-xxx`，在 `decktrace-games` 注册表加一行。不要把具体游戏塞进通用 crate。
-- 通用层不写死底牌区域/张数：底牌识别通过 `GameProfile.bottom`（`BottomSpec`）注入。
-- 发布产物只有 GUI：`crates/decktrace`（包名/二进制 `decktrace`），`scripts/bundle-macos.sh`
-  产出 `dist/decktrace.app`。TUI 不再作为可执行文件发布，也不再保留 TUI 二进制。
-- `decktrace-session` 是 headless 运行时，GUI 与测试共用；测试直接跑 `cargo test`。
-- 必跑：`cargo test --release --workspace`；识别回归依赖 `shots/`，样本缺失时跳过。
-- 实时/性能验证必须用 release；debug 下识别会慢约一个数量级。
-- macOS 采集已纯 Rust 化（ScreenCaptureKit），没有 Swift helper。
-  `.cargo/config.toml` 的 Swift runtime rpath 和 `capture-macos/build.rs` 的 link search 不要删，
-  否则 dyld 会找不到 `libswift_Concurrency.dylib`。
-- 大小王匹配是“1/4 粗搜索 + 全分辨率局部 CCOEFF_NORMED”；改阈值时先用
-  `DECKTRACE_TIMING=1` 看 masks/cards/jokers 分段耗时，再跑全部 golden 截图。
-- 性能：Rust release 无王搜索约 8–10ms/帧，含王搜索约 16–25ms/帧；双王都有下落后
-  运行时自动跳过王搜索。不要拿 Python 的“王确认后 15–25ms”对比 Rust 的含王路径。
-- 已做优化：并行掩码、红/黑与王搜索并行、RLE 连通域、缩小图 CCOEFF 选候选、
-  双王已知后跳过王搜索。RLE 连通域有随机 mask 对拍测试（`engine::tests`）。
-- 当前已知差距：Windows 后端未实现。
-
----
-
-## 13. 完成标准
-
-一个改动只有同时满足以下条件才算完成：
-
-- [ ] 在真实截图上验证，并保存标注图
-- [ ] 失败样本已加入回归测试
-- [ ] 全部单元测试通过
-- [ ] 实时运行无错误、无明显丢帧/积压
-- [ ] README/命令/依赖已同步
-- [ ] 没有残留后台进程或测试垃圾文件
+- [ ] 真实截图/真实窗口验证，保留失败样本
+- [ ] 全部 Rust 测试通过
+- [ ] 识别性能无明显退化
+- [ ] `dist/decktrace.app` 能启动并正常显示
+- [ ] README/AGENTS 同步
+- [ ] 无残留后台进程、无临时文件污染源码目录

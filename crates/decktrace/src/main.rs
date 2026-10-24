@@ -132,7 +132,8 @@ struct DeckApp {
     snapshot: TrackerSnapshot,
     error: Option<String>,
     sources: HashMap<String, RgbaImage>,
-    textures: HashMap<(String, u8), egui::TextureHandle>,
+    textures: HashMap<(String, bool), egui::TextureHandle>,
+    badge: Option<egui::TextureHandle>,
     last_key: Option<(Vec<String>, BTreeSet<String>)>,
 }
 
@@ -151,6 +152,7 @@ impl DeckApp {
             error: None,
             sources: HashMap::new(),
             textures: HashMap::new(),
+            badge: None,
             last_key: None,
         }
     }
@@ -164,26 +166,26 @@ impl DeckApp {
         }
     }
 
-    fn ensure_textures(&mut self, ctx: &egui::Context, cards: &[(String, u8)]) {
-        for (card_id, state) in cards {
-            let key = (card_id.clone(), *state);
+    fn ensure_textures(&mut self, ctx: &egui::Context, cards: &[(String, bool)]) {
+        for (card_id, inverted) in cards {
+            let key = (card_id.clone(), *inverted);
             if self.textures.contains_key(&key) {
                 continue;
             }
             let Some(source) = self.source(card_id) else {
                 continue;
             };
-            let image = match state {
-                1 => tint_bottom(source),
-                2 => invert(source),
-                _ => source.clone(),
+            let image = if *inverted {
+                invert(source)
+            } else {
+                source.clone()
             };
             let color = egui::ColorImage::from_rgba_unmultiplied(
                 [image.width() as usize, image.height() as usize],
                 image.as_raw(),
             );
             let texture = ctx.load_texture(
-                format!("{card_id}-{state}"),
+                format!("{card_id}-{}", if *inverted { "inv" } else { "normal" }),
                 color,
                 egui::TextureOptions::NEAREST,
             );
@@ -207,21 +209,12 @@ impl eframe::App for DeckApp {
         let ctx = ui.ctx().clone();
         let remaining = self.game.remaining_card_ids(&self.snapshot.seen_ids);
         let bombs = bomb_card_ids(&remaining, &self.game);
-        let cards: Vec<(String, u8)> = remaining
+        let cards: Vec<(String, bool)> = remaining
             .iter()
-            .map(|card_id| {
-                let state = if self.snapshot.bottom_ids.contains(card_id) {
-                    1
-                } else if bombs.contains(card_id) {
-                    2
-                } else {
-                    0
-                };
-                (card_id.clone(), state)
-            })
+            .map(|card_id| (card_id.clone(), bombs.contains(card_id)))
             .collect();
 
-        let key = (remaining.clone(), self.snapshot.bottom_ids.clone());
+        let key = (remaining.clone(), bombs.clone());
         if self.last_key.as_ref() != Some(&key) {
             self.last_key = Some(key);
             self.ensure_textures(&ctx, &cards);
@@ -240,8 +233,11 @@ impl eframe::App for DeckApp {
             ),
             egui::Sense::hover(),
         );
-        for (index, (card_id, state)) in cards.iter().enumerate() {
-            let Some(texture) = self.textures.get(&(card_id.clone(), *state)) else {
+        if self.badge.is_none() {
+            self.badge = load_bottom_badge(&ctx);
+        }
+        for (index, (card_id, inverted)) in cards.iter().enumerate() {
+            let Some(texture) = self.textures.get(&(card_id.clone(), *inverted)) else {
                 continue;
             };
             let pos =
@@ -254,6 +250,23 @@ impl eframe::App for DeckApp {
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                 egui::Color32::WHITE,
             );
+            if self.snapshot.bottom_ids.contains(card_id)
+                && let Some(badge) = &self.badge
+            {
+                let badge_rect = egui::Rect::from_min_size(
+                    egui::pos2(
+                        card_rect.min.x + (CARD_W as f32 - 9.0) / 2.0,
+                        card_rect.max.y - 9.0 - 2.0,
+                    ),
+                    egui::vec2(9.0, 9.0),
+                );
+                ui.painter().image(
+                    badge.id(),
+                    badge_rect,
+                    egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+            }
         }
         ctx.request_repaint_after(Duration::from_millis(80));
     }
@@ -265,16 +278,14 @@ impl Drop for DeckApp {
     }
 }
 
-fn tint_bottom(source: &RgbaImage) -> RgbaImage {
-    let mut out = source.clone();
-    for pixel in out.pixels_mut() {
-        let [r, g, b, a] = pixel.0;
-        let blend = |value: u8, tint: u8| -> u8 {
-            ((value as f32) * 0.58 + (tint as f32) * 0.42).round() as u8
-        };
-        *pixel = Rgba([blend(r, 37), blend(g, 99), blend(b, 235), a]);
-    }
-    out
+fn load_bottom_badge(ctx: &egui::Context) -> Option<egui::TextureHandle> {
+    const BADGE: &[u8] = include_bytes!("../assets/bottom_badge.png");
+    let image = image::load_from_memory(BADGE).ok()?.to_rgba8();
+    let color = egui::ColorImage::from_rgba_unmultiplied(
+        [image.width() as usize, image.height() as usize],
+        image.as_raw(),
+    );
+    Some(ctx.load_texture("bottom-badge", color, egui::TextureOptions::LINEAR))
 }
 
 fn invert(source: &RgbaImage) -> RgbaImage {
