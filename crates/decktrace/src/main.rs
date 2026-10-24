@@ -7,9 +7,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use decktrace::{Session, get_game};
-use decktrace_capture::Platform;
-use decktrace_core::{CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot};
-use decktrace_game_jj::JjRecognizer;
+use decktrace_capture::{Platform, WindowInfo};
+use decktrace_jj::JjRecognizer;
+use decktrace_tracking::{CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn find_window(args: &Args, game: &GameProfile) -> Result<decktrace_core::WindowInfo> {
+fn find_window(args: &Args, game: &GameProfile) -> Result<WindowInfo> {
     let platform = create_platform()?;
     let mut selector = game.window.clone();
     if let Some(title) = &args.title {
@@ -85,7 +85,7 @@ fn find_window(args: &Args, game: &GameProfile) -> Result<decktrace_core::Window
 
 fn spawn_worker(
     game: GameProfile,
-    window: decktrace_core::WindowInfo,
+    window: WindowInfo,
     tx: Sender<Message>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,

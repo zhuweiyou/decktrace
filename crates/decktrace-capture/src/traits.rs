@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use decktrace_core::{RawFrame, WindowInfo, WindowSelector};
+use decktrace_tracking::WindowSelector;
+
+use crate::types::{RawFrame, WindowInfo};
 
 use thiserror::Error;
 

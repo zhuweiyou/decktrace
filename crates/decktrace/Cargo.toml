@@ -10,9 +10,9 @@ name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-decktrace-game-jj = { path = "../decktrace-game-jj" }
+decktrace-jj = { path = "../decktrace-jj" }
 decktrace-capture = { path = "../decktrace-capture" }
-decktrace-core = { path = "../decktrace-core" }
+decktrace-tracking = { path = "../decktrace-tracking" }
 anyhow.workspace = true
 clap.workspace = true
 crossbeam-channel.workspace = true

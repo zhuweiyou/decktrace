@@ -1010,8 +1010,8 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "decktrace-capture",
- "decktrace-core",
- "decktrace-game-jj",
+ "decktrace-jj",
+ "decktrace-tracking",
  "eframe",
  "image",
 ]
@@ -1021,29 +1021,29 @@ name = "decktrace-capture"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
- "decktrace-core",
+ "decktrace-tracking",
  "image",
  "screencapturekit",
  "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "decktrace-core"
+name = "decktrace-jj"
 version = "0.1.0"
 dependencies = [
- "image",
- "serde",
-]
-
-[[package]]
-name = "decktrace-game-jj"
-version = "0.1.0"
-dependencies = [
- "decktrace-core",
+ "decktrace-tracking",
  "image",
  "imageproc",
  "rayon",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "decktrace-tracking"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "serde",
 ]
 
 [[package]]

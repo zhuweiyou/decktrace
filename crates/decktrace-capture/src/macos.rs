@@ -4,9 +4,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::{CaptureError, CaptureStream, Platform, Result, WindowService};
+use crate::{CaptureError, CaptureStream, Platform, RawFrame, Result, WindowInfo, WindowService};
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace_core::{RawFrame, WindowInfo};
 use screencapturekit::cm::CMSampleBufferExt;
 use screencapturekit::cv::CVPixelBufferLockFlags;
 use screencapturekit::prelude::*;

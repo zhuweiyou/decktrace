@@ -13,5 +13,5 @@ pub use bottom::{BottomConfig, BottomSpec};
 pub use config::{JokerBand, RecognitionConfig, ResetConfig};
 pub use deck::{CardTracker, TrackerSnapshot};
 pub use game::GameProfile;
-pub use models::{BBox, Detection, RawFrame, SUIT_SYMBOLS, WindowInfo, WindowSelector};
+pub use models::{BBox, Detection, SUIT_SYMBOLS, WindowSelector};
 pub use recognition::{RecognitionResult, Recognizer, SharedRecognizer};

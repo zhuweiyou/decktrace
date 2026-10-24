@@ -22,9 +22,9 @@
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer 抽象、CardTracker
-  decktrace-game-jj/          # JJ 实现：profile、templates、cards、recognition
-  decktrace-capture/          # 采集 trait + macOS/Windows 实现（cfg，Windows 占位）
+  decktrace-tracking/         # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
+  decktrace-jj/               # JJ 实现：profile、templates、cards、recognition
+  decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
@@ -32,10 +32,10 @@ start-gui.sh                  # 打包并启动
 
 规则：
 
-- 每个游戏一个独立 crate：`decktrace-game-xxx`。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
-- 通用层只依赖 `decktrace-core` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `decktrace-capture` 的采集 trait。
+- 每个游戏一个独立 crate：`decktrace-<game>`（例如 `decktrace-jj`）。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
+- 通用层只依赖 `decktrace-tracking` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `decktrace-capture` 的采集 trait。
 - capture 的抽象和实现内聚在 `decktrace-capture`，平台差异只用 `cfg` 和 target-specific dependencies。
-- 模板识别是 JJ 专属实现，放在 `decktrace-game-jj/src/recognition.rs`，不要恢复独立识别 crate。
+- 模板识别是 JJ 专属实现，放在 `decktrace-jj/src/recognition.rs`，不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 
 ## 3. 开发命令
@@ -68,7 +68,7 @@ red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点�
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
-真实截图回归在 `crates/decktrace-game-jj/tests/golden.rs`，依赖根目录 `shots/`；
+真实截图回归在 `crates/decktrace-jj/tests/golden.rs`，依赖根目录 `shots/`；
 样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
 ## 5. 底牌门控
@@ -98,7 +98,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
   - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
-- 打包脚本会拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`。
+- 打包脚本会拷贝 `crates/decktrace-jj/assets` 到 `Contents/Resources/assets/jj`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
 - 正式分发需要 Developer ID 签名和公证；当前脚本只是 ad-hoc 签名。

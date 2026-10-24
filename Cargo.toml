@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/decktrace-core",
-    "crates/decktrace-game-jj",
+    "crates/decktrace-tracking",
+    "crates/decktrace-jj",
     "crates/decktrace-capture",
     "crates/decktrace",
 ]

@@ -7,7 +7,7 @@ rust-version.workspace = true
 build = "build.rs"
 
 [dependencies]
-decktrace-core = { path = "../decktrace-core" }
+decktrace-tracking = { path = "../decktrace-tracking" }
 crossbeam-channel.workspace = true
 image.workspace = true
 thiserror.workspace = true

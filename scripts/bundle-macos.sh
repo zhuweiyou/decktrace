@@ -10,7 +10,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 
 cp "$ROOT/target/release/decktrace" "$APP/Contents/MacOS/decktrace"
-cp -R "$ROOT/crates/decktrace-game-jj/assets" "$APP/Contents/Resources/assets/jj"
+cp -R "$ROOT/crates/decktrace-jj/assets" "$APP/Contents/Resources/assets/jj"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

@@ -1,12 +1,12 @@
 [package]
-name = "decktrace-game-jj"
+name = "decktrace-jj"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-decktrace-core = { path = "../decktrace-core" }
+decktrace-tracking = { path = "../decktrace-tracking" }
 image.workspace = true
 imageproc.workspace = true
 rayon.workspace = true

@@ -32,9 +32,9 @@ cargo run --release -p decktrace
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer 抽象、CardTracker
-  decktrace-game-jj/          # JJ 实现：窗口、牌堆、模板、牌面素材、识别引擎
-  decktrace-capture/          # 采集 trait + macOS/Windows 实现（cfg，Windows 占位）
+  decktrace-tracking/         # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
+  decktrace-jj/               # JJ 实现：窗口、牌堆、模板、牌面素材、识别引擎
+  decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
   decktrace/                  # GUI + Session + 游戏注册表（唯一发布产物）
 scripts/
   bundle-macos.sh             # 生成 dist/decktrace.app
@@ -46,9 +46,9 @@ scripts/
 WindowService → CaptureStream → Session → Recognizer → CardTracker → GUI
 ```
 
-- `GameProfile` / `BottomSpec` / `Recognizer` 抽象在 `decktrace-core`。
+- `GameProfile` / `BottomSpec` / `Recognizer` 抽象在 `decktrace-tracking`。
 - 采集 trait 与平台实现内聚在 `decktrace-capture`：trait 供 Session 使用，macOS/Windows 按 `cfg(target_os)` 编译。
-- 模板识别实现属于 JJ：`decktrace-game-jj/src/recognition.rs`。
+- 模板识别实现属于 JJ：`decktrace-jj/src/recognition.rs`。
 - `Session` 只依赖 core 的 `Recognizer` 与 capture 的 `CaptureStream/Platform`；`decktrace` 负责把 JJ 和平台实现注入进去。
 - 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
 
@@ -101,7 +101,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 
 新建一个游戏 crate：
 
-1. `crates/decktrace-game-xxx`
+1. `crates/decktrace-<game>`（例如 `decktrace-jj`）
 2. 实现 `GameProfile`：窗口特征、牌堆、模板目录、牌面素材、底牌策略、重置规则
 3. 在 `crates/decktrace/src/registry.rs` 加一个分支，并注入该游戏的 `Recognizer` 实现
 
@@ -114,7 +114,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 
 - 构建 `decktrace` release 二进制
 - 生成 `dist/decktrace.app/Contents/MacOS/decktrace`
-- 拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`
+- 拷贝 `crates/decktrace-jj/assets` 到 `Contents/Resources/assets/jj`
 - 写入 `Info.plist`（含 `NSScreenCaptureUsageDescription`）
 - 做本机 ad-hoc 签名
 
@@ -126,8 +126,8 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 cargo test --release --workspace
 ```
 
-- 牌堆、底牌门控、自动重置：`crates/decktrace-game-jj/tests/tracker.rs`
-- 真实截图识别回归：`crates/decktrace-game-jj/tests/golden.rs`
+- 牌堆、底牌门控、自动重置：`crates/decktrace-jj/tests/tracker.rs`
+- 真实截图识别回归：`crates/decktrace-jj/tests/golden.rs`
 - 连通域随机 mask 对拍：`engine::tests`
 
 截图回归依赖仓库根目录的 `shots/`；样本缺失时自动跳过。把真实牌局截图放进 `shots/`

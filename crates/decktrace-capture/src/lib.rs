@@ -1,8 +1,10 @@
 //! 采集子系统：trait、窗口选择、macOS/Windows 实现。
 
 mod traits;
+mod types;
 
 pub use traits::{CaptureError, CaptureStream, Platform, Result, WindowService, select_window};
+pub use types::{RawFrame, WindowInfo};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
