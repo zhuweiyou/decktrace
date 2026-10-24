@@ -2,17 +2,14 @@
 resolver = "2"
 members = [
     "crates/decktrace-core",
-    "crates/decktrace-game-api",
+    "crates/decktrace-game-spec",
     "crates/decktrace-game-jj",
     "crates/decktrace-games",
     "crates/decktrace-recognition",
     "crates/decktrace-capture",
     "crates/decktrace-capture-macos",
-    "crates/decktrace-ui",
-    "crates/decktrace-ui-tui",
-    "crates/decktrace-app",
-    "crates/decktrace-cli",
-    "crates/decktrace-ui-gui",
+    "crates/decktrace-session",
+    "crates/decktrace",
 ]
 
 [workspace.package]

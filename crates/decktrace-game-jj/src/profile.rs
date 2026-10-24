@@ -3,9 +3,32 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use decktrace_core::{JokerBand, RecognitionConfig, ResetConfig, WindowSelector};
-use decktrace_game_api::{BottomConfig, GameProfile};
+use decktrace_game_spec::{BottomConfig, GameProfile};
 
+/// 资源根目录：优先环境变量，其次 .app 内的 Contents/Resources，最后开发目录。
 fn asset_root() -> PathBuf {
+    if let Ok(root) = std::env::var("DECKTRACE_ASSETS") {
+        let path = PathBuf::from(root);
+        if path.join("jj/templates").exists() {
+            return path.join("jj");
+        }
+        return path;
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        // decktrace.app/Contents/MacOS/decktrace -> Contents/Resources/assets/jj
+        if let Some(contents) = exe.parent().and_then(|macos| macos.parent()) {
+            let bundled = contents.join("Resources/assets/jj");
+            if bundled.join("templates").exists() {
+                return bundled;
+            }
+        }
+        if let Some(dir) = exe.parent() {
+            let adjacent = dir.join("assets/jj");
+            if adjacent.join("templates").exists() {
+                return adjacent;
+            }
+        }
+    }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
 

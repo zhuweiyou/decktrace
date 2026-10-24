@@ -10,7 +10,6 @@ Python 版本暂时保留，作为识别结果的对照 oracle；Rust 侧跑通�
 - 窗口枚举 + ScreenCaptureKit 实时采集（纯 Rust，无 Swift helper）
 - 模板识别（点数/花色/大小王/底牌区），6 张真实截图与 Python 版结果一致
 - 三张底牌开局门控、底牌不提前扣除、自动重置
-- TUI 实时显示
 - 独立 GUI 应用（置顶牌条，普通/底牌蓝/炸弹反色）
 
 尚未做：
@@ -23,18 +22,23 @@ Python 版本暂时保留，作为识别结果的对照 oracle；Rust 侧跑通�
 ```text
 crates/
   decktrace-core/             # 模型、牌堆规则、CardTracker、底牌门控
-  decktrace-game-api/         # GameProfile / BottomSpec 接入接口
-  decktrace-game-jj/          # JJ 斗地主：配置、模板、牌面素材
+  decktrace-game-spec/        # 游戏接入契约：GameProfile / BottomSpec
+  decktrace-game-jj/          # JJ 斗地主实现：配置、模板、牌面素材
   decktrace-games/            # 游戏注册表（新增游戏在这里注册一行）
   decktrace-recognition/      # 通用模板识别引擎
   decktrace-capture/          # WindowService / CaptureStream / Platform trait
   decktrace-capture-macos/    # ScreenCaptureKit 实现
-  decktrace-app/              # Session：采集→识别→状态机；TUI 运行循环
-  decktrace-ui/               # Renderer trait
-  decktrace-ui-tui/           # 终端渲染
-  decktrace-cli/              # CLI 二进制 decktrace
-  decktrace-ui-gui/           # 独立 GUI 应用（二进制 decktrace-gui）
+  decktrace-session/          # 无 UI 运行时：采集→识别→状态机、自动重置
+  decktrace/                  # GUI 应用：egui 置顶牌条（二进制 decktrace，打包 decktrace.app）
 ```
+
+### Crate 职责
+
+- `decktrace-session`：headless，不依赖 clap/crossterm/egui，GUI 和测试共用。
+- `decktrace`：唯一的发布应用。自己驱动 egui 事件循环，打包为 `decktrace.app`。
+- `decktrace-game-spec`：只定义游戏契约；`decktrace-game-jj` 才是 JJ 实现，二者不要混淆。
+- `decktrace-games`：注册表，负责把各游戏 crate 组合起来。
+- TUI 不再作为发布产物，也不再有独立二进制；测试直接 `cargo test`。
 
 新增游戏时：
 
@@ -45,15 +49,14 @@ crates/
 ## 命令
 
 ```bash
-# 命令行（TUI / 截图 / 识别）
-./start-rust.sh games
-./start-rust.sh list
-./start-rust.sh shot --out shots/rust.png
-./start-rust.sh run --duration 30
-./start-rust.sh run --once --image shots/round_now.png
-
-# 独立 GUI 应用
+# 打包并启动 decktrace.app
 ./start-gui.sh
+
+# 开发时直接跑
+cargo run --release -p decktrace
+
+# 只打包不启动
+./scripts/bundle-macos.sh
 
 # 测试（识别回归必须在 release 下跑，debug 会慢很多）
 cargo test --release --workspace

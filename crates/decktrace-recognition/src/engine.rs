@@ -10,7 +10,7 @@ use imageproc::rect::Rect;
 use thiserror::Error;
 
 use decktrace_core::{Detection, RecognitionConfig, SUIT_SYMBOLS};
-use decktrace_game_api::{BottomSpec, GameProfile};
+use decktrace_game_spec::{BottomSpec, GameProfile};
 
 #[derive(Debug, Error)]
 pub enum RecognitionError {

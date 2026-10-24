@@ -7,7 +7,7 @@ rust-version.workspace = true
 
 [dependencies]
 decktrace-core = { path = "../decktrace-core" }
-decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-game-spec = { path = "../decktrace-game-spec" }
 image.workspace = true
 imageproc.workspace = true
 rayon.workspace = true

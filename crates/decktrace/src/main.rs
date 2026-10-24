@@ -6,11 +6,11 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace_app::Session;
 use decktrace_capture::Platform;
 use decktrace_core::{CardTracker, TrackerSnapshot};
-use decktrace_game_api::GameProfile;
+use decktrace_game_spec::GameProfile;
 use decktrace_games::get_game;
+use decktrace_session::Session;
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 

@@ -1,5 +1,5 @@
 [package]
-name = "decktrace-cli"
+name = "decktrace"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,15 +10,15 @@ name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-decktrace-app = { path = "../decktrace-app" }
+decktrace-session = { path = "../decktrace-session" }
 decktrace-capture = { path = "../decktrace-capture" }
 decktrace-core = { path = "../decktrace-core" }
-decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-game-spec = { path = "../decktrace-game-spec" }
 decktrace-games = { path = "../decktrace-games" }
-decktrace-ui = { path = "../decktrace-ui" }
-decktrace-ui-tui = { path = "../decktrace-ui-tui" }
-clap.workspace = true
 anyhow.workspace = true
+clap.workspace = true
+crossbeam-channel.workspace = true
+eframe.workspace = true
 image.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

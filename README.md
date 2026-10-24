@@ -1,7 +1,7 @@
 # 斗地主记牌器（decktrace）
 
 > **Rust 重写进行中**：新 workspace 见 [`RUST.md`](RUST.md)。
-> 本机可用 `./start-rust.sh`（TUI）和 `./start-gui.sh`（独立 GUI 应用）启动。
+> Rust 版只发布 GUI 应用，`./start-gui.sh` 会打包并启动 `dist/decktrace.app`。
 > 下面的 Python 文档在迁移完成前继续有效。
 
 通过窗口采集识别牌面，自动扣除自己的手牌和所有人出过的牌；底部记牌表或置顶 GUI 展示剩余牌。

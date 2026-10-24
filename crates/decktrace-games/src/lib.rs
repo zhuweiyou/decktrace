@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use decktrace_game_api::GameProfile;
+use decktrace_game_spec::GameProfile;
 
 fn games() -> &'static [GameProfile] {
     static GAMES: OnceLock<Vec<GameProfile>> = OnceLock::new();

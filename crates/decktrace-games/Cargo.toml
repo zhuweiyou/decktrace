@@ -6,5 +6,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-game-spec = { path = "../decktrace-game-spec" }
 decktrace-game-jj = { path = "../decktrace-game-jj" }
