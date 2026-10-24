@@ -1,25 +1,25 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use decktrace_game_jj::profile;
-use decktrace_recognition::CardRecognizer;
+use decktrace_core::RecognitionResult;
+use decktrace_game_jj::{JjRecognizer, profile};
 
 fn shots_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shots")
 }
 
-fn recognize(name: &str) -> Option<decktrace_recognition::RecognitionResult> {
+fn recognize(name: &str) -> Option<RecognitionResult> {
     let path = shots_dir().join(name);
     if !path.exists() {
         return None;
     }
     let game = profile();
-    let recognizer = CardRecognizer::new(&game).expect("recognizer");
+    let recognizer = JjRecognizer::new(&game).expect("recognizer");
     let image = image::open(&path).expect("image").to_rgb8();
     Some(recognizer.recognize(&image, true))
 }
 
-fn id_counts(result: &decktrace_recognition::RecognitionResult) -> BTreeMap<String, usize> {
+fn id_counts(result: &RecognitionResult) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for det in &result.detections {
         *counts.entry(det.card_id()).or_insert(0) += 1;
@@ -27,7 +27,7 @@ fn id_counts(result: &decktrace_recognition::RecognitionResult) -> BTreeMap<Stri
     counts
 }
 
-fn bottom_ids(result: &decktrace_recognition::RecognitionResult) -> BTreeSet<String> {
+fn bottom_ids(result: &RecognitionResult) -> BTreeSet<String> {
     result
         .detections
         .iter()

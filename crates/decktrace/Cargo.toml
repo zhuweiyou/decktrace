@@ -10,8 +10,6 @@ name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-decktrace-capture = { path = "../decktrace-capture" }
-decktrace-recognition = { path = "../decktrace-recognition" }
 decktrace-game-jj = { path = "../decktrace-game-jj" }
 decktrace-core = { path = "../decktrace-core" }
 anyhow.workspace = true
@@ -20,3 +18,9 @@ crossbeam-channel.workspace = true
 eframe.workspace = true
 image.workspace = true
 
+
+[target.'cfg(target_os = "macos")'.dependencies]
+decktrace-capture-macos = { path = "../decktrace-capture-macos" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+decktrace-capture-windows = { path = "../decktrace-capture-windows" }

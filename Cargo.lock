@@ -1009,16 +1009,16 @@ dependencies = [
  "anyhow",
  "clap",
  "crossbeam-channel",
- "decktrace-capture",
+ "decktrace-capture-macos",
+ "decktrace-capture-windows",
  "decktrace-core",
  "decktrace-game-jj",
- "decktrace-recognition",
  "eframe",
  "image",
 ]
 
 [[package]]
-name = "decktrace-capture"
+name = "decktrace-capture-macos"
 version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
@@ -1026,6 +1026,13 @@ dependencies = [
  "image",
  "screencapturekit",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "decktrace-capture-windows"
+version = "0.1.0"
+dependencies = [
+ "decktrace-core",
 ]
 
 [[package]]
@@ -1042,14 +1049,6 @@ name = "decktrace-game-jj"
 version = "0.1.0"
 dependencies = [
  "decktrace-core",
-]
-
-[[package]]
-name = "decktrace-recognition"
-version = "0.1.0"
-dependencies = [
- "decktrace-core",
- "decktrace-game-jj",
  "image",
  "imageproc",
  "rayon",

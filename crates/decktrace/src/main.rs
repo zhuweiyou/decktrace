@@ -7,9 +7,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use decktrace::{Session, get_game};
-use decktrace_capture::Platform;
-use decktrace_core::GameProfile;
-use decktrace_core::{CardTracker, TrackerSnapshot};
+use decktrace_core::{CardTracker, GameProfile, Platform, SharedRecognizer, TrackerSnapshot};
+use decktrace_game_jj::JjRecognizer;
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
@@ -18,7 +17,7 @@ const CARD_H: u32 = 30;
 const MARGIN: u32 = 4;
 
 #[derive(Parser, Debug)]
-#[command(name = "decktrace-gui", about = "斗地主记牌器（GUI）", version)]
+#[command(name = "decktrace", about = "斗地主记牌器", version)]
 struct Args {
     #[arg(long, default_value = "jj")]
     game: String,
@@ -95,7 +94,10 @@ fn spawn_worker(
         .spawn(move || {
             let result = (|| -> Result<()> {
                 let platform = create_platform()?;
-                let mut session = Session::new(platform.as_ref(), game, &window, 15.0, 2, true)?;
+                let recognizer: SharedRecognizer =
+                    Arc::new(JjRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?);
+                let mut session =
+                    Session::new(platform.as_ref(), game, &window, 15.0, 2, true, recognizer)?;
                 session.start()?;
                 while !stop.load(Ordering::Relaxed) {
                     match session.tick(Duration::from_millis(200)) {
@@ -331,10 +333,15 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
 
 #[cfg(target_os = "macos")]
 fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(Box::new(decktrace_capture::macos::MacPlatform::new()?))
+    Ok(Box::new(decktrace_capture_macos::MacPlatform::new()?))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn create_platform() -> Result<Box<dyn Platform>> {
-    Err(anyhow::anyhow!("当前只实现了 macOS 采集后端"))
+    Ok(Box::new(decktrace_capture_windows::WindowsPlatform::new()?))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn create_platform() -> Result<Box<dyn Platform>> {
+    Err(anyhow::anyhow!("当前只实现了 macOS/Windows 采集后端"))
 }

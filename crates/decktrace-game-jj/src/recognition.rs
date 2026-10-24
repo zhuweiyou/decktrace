@@ -9,8 +9,10 @@ use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
 use thiserror::Error;
 
-use decktrace_core::{BottomSpec, GameProfile};
-use decktrace_core::{Detection, RecognitionConfig, SUIT_SYMBOLS};
+use decktrace_core::{
+    BottomSpec, Detection, GameProfile, RecognitionConfig, RecognitionResult, Recognizer,
+    SUIT_SYMBOLS,
+};
 
 #[derive(Debug, Error)]
 pub enum RecognitionError {
@@ -24,14 +26,6 @@ pub enum RecognitionError {
     Image(#[from] image::ImageError),
 }
 
-#[derive(Debug, Clone)]
-pub struct RecognitionResult {
-    pub detections: Vec<Detection>,
-    pub elapsed_ms: f64,
-    pub frame_width: u32,
-    pub frame_height: u32,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Comp {
     x: u32,
@@ -41,7 +35,7 @@ struct Comp {
     area: u32,
 }
 
-pub struct CardRecognizer {
+pub struct JjRecognizer {
     cfg: RecognitionConfig,
     ranks: BTreeMap<String, GrayImage>,
     suits: BTreeMap<String, GrayImage>,
@@ -50,7 +44,7 @@ pub struct CardRecognizer {
     bottom: Option<Arc<dyn BottomSpec>>,
 }
 
-impl CardRecognizer {
+impl JjRecognizer {
     pub fn new(game: &GameProfile) -> Result<Self, RecognitionError> {
         let base = Path::new(&game.templates_dir);
         let rank_dir = base.join("ranks");
@@ -381,6 +375,12 @@ impl CardRecognizer {
             }
         }
         kept
+    }
+}
+
+impl Recognizer for JjRecognizer {
+    fn recognize(&self, image: &RgbImage, detect_jokers: bool) -> RecognitionResult {
+        JjRecognizer::recognize(self, image, detect_jokers)
     }
 }
 

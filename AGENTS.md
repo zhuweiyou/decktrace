@@ -22,10 +22,10 @@
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、CardTracker、底牌门控
-  decktrace-game-jj/          # JJ 实现：profile、templates、cards
-  decktrace-recognition/      # 模板识别
-  decktrace-capture/          # 平台 trait + macOS ScreenCaptureKit
+  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer/CaptureStream 抽象、CardTracker
+  decktrace-game-jj/          # JJ 实现：profile、templates、cards、recognition
+  decktrace-capture-macos/    # ScreenCaptureKit 实现
+  decktrace-capture-windows/  # Windows 采集占位
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
@@ -34,7 +34,8 @@ start-gui.sh                  # 打包并启动
 规则：
 
 - 每个游戏一个独立 crate：`decktrace-game-xxx`。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
-- 通用层只依赖 `decktrace-core` 里的 `GameProfile` / `BottomSpec` 契约。
+- 通用层只依赖 `decktrace-core` 里的 `GameProfile` / `BottomSpec` / `Recognizer` / `CaptureStream` 抽象。
+- 模板识别是 JJ 专属实现，放在 `decktrace-game-jj/src/recognition.rs`，不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 
 ## 3. 开发命令
@@ -67,7 +68,7 @@ red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点�
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
-真实截图回归在 `crates/decktrace-recognition/tests/golden.rs`，依赖根目录 `shots/`；
+真实截图回归在 `crates/decktrace-game-jj/tests/golden.rs`，依赖根目录 `shots/`；
 样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
 ## 5. 底牌门控
@@ -94,7 +95,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
 - `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
   - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
-  - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
+  - `crates/decktrace-capture-macos/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
 - 打包脚本会拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`。

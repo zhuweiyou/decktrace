@@ -1,5 +1,7 @@
-//! JJ 斗地主（微信小程序）的游戏配置与素材。
+//! JJ 斗地主：游戏配置、牌面素材与模板识别实现。
 
 pub mod profile;
+pub mod recognition;
 
 pub use profile::profile;
+pub use recognition::{JjRecognizer, RecognitionError};

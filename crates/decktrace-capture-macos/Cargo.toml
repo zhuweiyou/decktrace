@@ -1,16 +1,16 @@
 [package]
-name = "decktrace-recognition"
+name = "decktrace-capture-macos"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+build = "build.rs"
 
 [dependencies]
 decktrace-core = { path = "../decktrace-core" }
+crossbeam-channel.workspace = true
 image.workspace = true
-imageproc.workspace = true
-rayon.workspace = true
 thiserror.workspace = true
 
-[dev-dependencies]
-decktrace-game-jj = { path = "../decktrace-game-jj" }
+[target.'cfg(target_os = "macos")'.dependencies]
+screencapturekit = { workspace = true, features = ["macos_14_0"] }

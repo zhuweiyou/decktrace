@@ -1,16 +1,16 @@
 //! 通用运行时：采集流 -> 识别 -> 记牌状态机。
 //!
-//! 不绑定 UI：TUI 和独立 GUI 应用都复用 `Session`。
+//! 不绑定 UI：GUI 应用与测试复用 `Session`。
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use decktrace_capture::{CaptureStream, Platform};
-use decktrace_core::GameProfile;
-use decktrace_core::{CardTracker, Detection, TrackerSnapshot, WindowInfo};
-use decktrace_recognition::CardRecognizer;
+use decktrace_core::{
+    CaptureStream, CardTracker, Detection, GameProfile, Platform, SharedRecognizer,
+    TrackerSnapshot, WindowInfo,
+};
 
 pub struct Tick {
     pub snapshot: TrackerSnapshot,
@@ -123,7 +123,7 @@ impl AutoReset {
 /// 一局实时会话：采集、识别、底牌门控、自动重置。
 pub struct Session {
     game: Arc<GameProfile>,
-    recognizer: CardRecognizer,
+    recognizer: SharedRecognizer,
     tracker: CardTracker,
     auto_reset: AutoReset,
     stream: Box<dyn CaptureStream>,
@@ -142,8 +142,8 @@ impl Session {
         fps: f32,
         min_hits: usize,
         auto_reset: bool,
+        recognizer: SharedRecognizer,
     ) -> Result<Self> {
-        let recognizer = CardRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?;
         let stream = platform.create_capture_stream(window, fps)?;
         let game = Arc::new(game);
         let tracker = CardTracker::new(game.clone(), min_hits, 0.92, 1.6);

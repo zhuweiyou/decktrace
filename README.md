@@ -32,11 +32,11 @@ cargo run --release -p decktrace
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、牌堆、CardTracker
-  decktrace-game-jj/          # JJ 斗地主实现：窗口、牌堆、模板、牌面素材
-  decktrace-recognition/      # 通用模板识别引擎
-  decktrace-capture/          # 平台 trait + macOS ScreenCaptureKit
-  decktrace/                  # GUI 应用 + Session + 游戏注册表（唯一发布产物）
+  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer/CaptureStream 抽象、CardTracker
+  decktrace-game-jj/          # JJ 实现：窗口、牌堆、模板、牌面素材、识别引擎
+  decktrace-capture-macos/    # ScreenCaptureKit 实现
+  decktrace-capture-windows/  # Windows 采集占位（接口已留）
+  decktrace/                  # GUI + Session + 游戏注册表（唯一发布产物）
 scripts/
   bundle-macos.sh             # 生成 dist/decktrace.app
 ```
@@ -47,8 +47,9 @@ scripts/
 WindowService → CaptureStream → Session → CardRecognizer → CardTracker → GUI
 ```
 
-- `GameProfile` / `BottomSpec` 在 `decktrace-core`；`decktrace-game-jj` 只负责 JJ 实现。
-- `Session` 在 `decktrace` 的 lib 里，不依赖 UI；`main.rs` 只负责 GUI。
+- `GameProfile` / `BottomSpec` / `Recognizer` / `CaptureStream` 抽象在 `decktrace-core`。
+- 模板识别实现属于 JJ：`decktrace-game-jj/src/recognition.rs`。
+- `Session` 只依赖 core 的 `Recognizer` 和 `CaptureStream`；`decktrace` 负责把 JJ 实现注入进去。
 - 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
 
 ## 识别规则
@@ -102,7 +103,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 
 1. `crates/decktrace-game-xxx`
 2. 实现 `GameProfile`：窗口特征、牌堆、模板目录、牌面素材、底牌策略、重置规则
-3. 在 `crates/decktrace/src/registry.rs` 加一个分支
+3. 在 `crates/decktrace/src/registry.rs` 加一个分支，并注入该游戏的 `Recognizer` 实现
 
 没有底牌概念的游戏把 `bottom` 设为 `None`，tracker 会直接开始记牌。
 底牌识别方式不是通用的：可以实现自己的 `BottomSpec`。
@@ -126,7 +127,7 @@ cargo test --release --workspace
 ```
 
 - 牌堆、底牌门控、自动重置：`crates/decktrace-game-jj/tests/tracker.rs`
-- 真实截图识别回归：`crates/decktrace-recognition/tests/golden.rs`
+- 真实截图识别回归：`crates/decktrace-game-jj/tests/golden.rs`
 - 连通域随机 mask 对拍：`engine::tests`
 
 截图回归依赖仓库根目录的 `shots/`；样本缺失时自动跳过。把真实牌局截图放进 `shots/`

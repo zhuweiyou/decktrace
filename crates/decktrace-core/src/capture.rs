@@ -1,11 +1,9 @@
-//! 平台抽象与 macOS ScreenCaptureKit 实现。
+//! 平台与采集抽象。具体实现由 capture-* crate 提供。
 
 use std::time::Duration;
 
-use decktrace_core::{RawFrame, WindowInfo, WindowSelector};
+use crate::{RawFrame, WindowInfo, WindowSelector};
 
-#[cfg(target_os = "macos")]
-pub mod macos;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

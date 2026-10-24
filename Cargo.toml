@@ -3,8 +3,8 @@ resolver = "2"
 members = [
     "crates/decktrace-core",
     "crates/decktrace-game-jj",
-    "crates/decktrace-recognition",
-    "crates/decktrace-capture",
+    "crates/decktrace-capture-macos",
+    "crates/decktrace-capture-windows",
     "crates/decktrace",
 ]
 

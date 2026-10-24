@@ -3,13 +3,17 @@
 //! 这一层不依赖 macOS、采集后端、具体游戏或 UI。
 
 pub mod bottom;
+pub mod capture;
 pub mod config;
 pub mod deck;
 pub mod game;
 pub mod models;
+pub mod recognition;
 
 pub use bottom::{BottomConfig, BottomSpec};
+pub use capture::{CaptureError, CaptureStream, Platform, Result, WindowService};
 pub use config::{JokerBand, RecognitionConfig, ResetConfig};
 pub use deck::{CardTracker, TrackerSnapshot};
 pub use game::GameProfile;
 pub use models::{BBox, Detection, RawFrame, SUIT_SYMBOLS, WindowInfo, WindowSelector};
+pub use recognition::{RecognitionResult, Recognizer, SharedRecognizer};
