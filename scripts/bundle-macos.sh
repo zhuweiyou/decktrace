@@ -12,6 +12,9 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 cp "$ROOT/target/release/decktrace" "$APP/Contents/MacOS/decktrace"
 cp -R "$ROOT/crates/decktrace-jj/assets" "$APP/Contents/Resources/assets/jj"
 
+VERSION="$(cargo pkgid -p decktrace 2>/dev/null | sed 's/.*#//')"
+[ -n "$VERSION" ] || VERSION="0.1.0"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -32,7 +35,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>__VERSION__</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -47,6 +50,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+sed -i '' "s/__VERSION__/$VERSION/" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # 本机自签名，便于 TCC 稳定识别；正式分发需要 Developer ID 签名和公证。

@@ -34,7 +34,6 @@ pub trait CaptureStream: Send {
     fn start(&mut self) -> Result<()>;
     fn read(&mut self, timeout: Duration) -> Result<Option<RawFrame>>;
     fn stop(&mut self);
-    fn target_fps(&self) -> f32;
     fn backend_name(&self) -> &str;
 }
 

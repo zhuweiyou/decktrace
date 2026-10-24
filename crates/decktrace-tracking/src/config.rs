@@ -13,9 +13,7 @@ pub struct JokerBand {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecognitionConfig {
     pub rank_template_height: u32,
-    pub ref_suit_height: f32,
     pub reference_width: u32,
-    pub reference_height: u32,
     pub rank_min_score: f32,
     pub suit_min_score: f32,
     pub face_min_fraction: f32,
@@ -31,9 +29,7 @@ impl Default for RecognitionConfig {
     fn default() -> Self {
         Self {
             rank_template_height: 70,
-            ref_suit_height: 45.0,
             reference_width: 1800,
-            reference_height: 1100,
             rank_min_score: 0.55,
             suit_min_score: 0.60,
             face_min_fraction: 0.25,

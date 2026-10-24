@@ -4,4 +4,4 @@ pub mod registry;
 pub mod session;
 
 pub use registry::{get_game, list_games};
-pub use session::Session;
+pub use session::{Session, SessionConfig};

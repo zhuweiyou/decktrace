@@ -14,7 +14,6 @@ pub struct WindowInfo {
     pub height: f64,
     pub onscreen: bool,
     pub layer: i32,
-    pub scale: f64,
 }
 
 impl WindowInfo {

@@ -21,9 +21,6 @@ pub struct GameProfile {
     pub reset: ResetConfig,
     /// None 表示该游戏没有“等底牌开局”的概念，直接开始记牌。
     pub bottom: Option<Arc<dyn BottomSpec>>,
-    pub recent_limit: usize,
-    pub default_source: String,
-    pub supported_sources: Vec<String>,
 }
 
 impl GameProfile {
@@ -69,6 +66,12 @@ impl GameProfile {
             return Err(format!(
                 "游戏模板目录不存在：{}",
                 self.templates_dir.display()
+            ));
+        }
+        if !self.card_assets_dir.exists() {
+            return Err(format!(
+                "游戏牌面素材目录不存在：{}",
+                self.card_assets_dir.display()
             ));
         }
         for rank in &self.display_ranks {

@@ -6,7 +6,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace::{Session, get_game};
+use decktrace::{Session, SessionConfig, get_game};
 use decktrace_capture::{Platform, WindowInfo};
 use decktrace_jj::JjRecognizer;
 use decktrace_tracking::{CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot};
@@ -44,7 +44,14 @@ fn main() -> Result<()> {
 
     let (tx, rx) = bounded::<Message>(1);
     let stop = Arc::new(AtomicBool::new(false));
-    spawn_worker(game.clone(), window, tx, rx.clone(), stop.clone())?;
+    spawn_worker(
+        game.clone(),
+        window,
+        tx,
+        rx.clone(),
+        stop.clone(),
+        args.min_hits,
+    )?;
 
     let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
     let initial = tracker.snapshot();
@@ -89,6 +96,7 @@ fn spawn_worker(
     tx: Sender<Message>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
+    min_hits: usize,
 ) -> Result<()> {
     std::thread::Builder::new()
         .name("capture".to_string())
@@ -97,13 +105,21 @@ fn spawn_worker(
                 let platform = create_platform()?;
                 let recognizer: SharedRecognizer =
                     Arc::new(JjRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?);
-                let mut session =
-                    Session::new(platform.as_ref(), game, &window, 15.0, 2, true, recognizer)?;
+                let mut session = Session::new(
+                    platform.as_ref(),
+                    game,
+                    &window,
+                    recognizer,
+                    SessionConfig {
+                        min_hits,
+                        ..SessionConfig::default()
+                    },
+                )?;
                 session.start()?;
                 while !stop.load(Ordering::Relaxed) {
                     match session.tick(Duration::from_millis(200)) {
-                        Ok(Some(tick)) => {
-                            if tx.try_send(Message::Snapshot(tick.snapshot)).is_err() {
+                        Ok(Some(snapshot)) => {
+                            if tx.try_send(Message::Snapshot(snapshot)).is_err() {
                                 let _ = rx.try_recv();
                                 let _ = tx.try_send(Message::Snapshot(session.snapshot()));
                             }

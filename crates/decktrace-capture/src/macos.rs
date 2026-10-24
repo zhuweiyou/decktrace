@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::{CaptureError, CaptureStream, Platform, RawFrame, Result, WindowInfo, WindowService};
 use crossbeam_channel::{Receiver, Sender, bounded};
+use image::RgbImage;
 use screencapturekit::cm::CMSampleBufferExt;
 use screencapturekit::cv::CVPixelBufferLockFlags;
 use screencapturekit::prelude::*;
@@ -79,7 +80,6 @@ impl WindowService for MacWindowService {
                 height: frame.size.height,
                 onscreen: window.is_on_screen(),
                 layer: window.window_layer(),
-                scale: 1.0,
             });
         }
         Ok(windows)
@@ -109,24 +109,7 @@ impl SCStreamOutputTrait for FrameHandler {
         let Some(slice) = (unsafe { guard.as_slice() }) else {
             return;
         };
-        let mut data = Vec::with_capacity((width as usize) * (height as usize) * 3);
-        for row in 0..height {
-            let start = row as usize * bytes_per_row;
-            let end = start + width as usize * 4;
-            if end > slice.len() {
-                break;
-            }
-            for chunk in slice[start..end].chunks_exact(4) {
-                // BGRA -> RGB
-                data.push(chunk[2]);
-                data.push(chunk[1]);
-                data.push(chunk[0]);
-            }
-        }
-        if data.len() != (width as usize) * (height as usize) * 3 {
-            return;
-        }
-        let Some(image) = image::RgbImage::from_raw(width, height, data) else {
+        let Some(image) = bgra_to_rgb(slice, width, height, bytes_per_row) else {
             return;
         };
         let seq = self.seq.fetch_add(1, Ordering::Relaxed);
@@ -151,7 +134,6 @@ impl SCStreamOutputTrait for FrameHandler {
 pub struct SckCaptureStream {
     stream: Option<SCStream>,
     rx: Receiver<RawFrame>,
-    fps: f32,
     started: bool,
 }
 
@@ -201,7 +183,6 @@ impl SckCaptureStream {
         Ok(Self {
             stream: Some(stream),
             rx,
-            fps,
             started: false,
         })
     }
@@ -237,10 +218,6 @@ impl CaptureStream for SckCaptureStream {
         }
     }
 
-    fn target_fps(&self) -> f32 {
-        self.fps
-    }
-
     fn backend_name(&self) -> &str {
         "screencapturekit"
     }
@@ -252,9 +229,47 @@ impl Drop for SckCaptureStream {
     }
 }
 
+/// BGRA/BGRx 像素缓冲转 RGB。按行预分配写入，避免逐像素 push。
+fn bgra_to_rgb(slice: &[u8], width: u32, height: u32, bytes_per_row: usize) -> Option<RgbImage> {
+    let row_bytes = width as usize * 4;
+    if width == 0 || height == 0 || bytes_per_row < row_bytes {
+        return None;
+    }
+    let mut data = vec![0u8; width as usize * height as usize * 3];
+    for row in 0..height as usize {
+        let start = row * bytes_per_row;
+        let end = start + row_bytes;
+        if end > slice.len() {
+            return None;
+        }
+        let src = &slice[start..end];
+        let dst = &mut data[row * width as usize * 3..(row + 1) * width as usize * 3];
+        for (dst_px, src_px) in dst.chunks_exact_mut(3).zip(src.chunks_exact(4)) {
+            dst_px[0] = src_px[2];
+            dst_px[1] = src_px[1];
+            dst_px[2] = src_px[0];
+        }
+    }
+    RgbImage::from_raw(width, height, data)
+}
+
 fn init_coregraphics() {
     unsafe extern "C" {
         fn sc_initialize_core_graphics();
     }
     unsafe { sc_initialize_core_graphics() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bgra_to_rgb;
+
+    #[test]
+    fn bgra_to_rgb_converts_pixels() {
+        // 2x1: (B=30,G=20,R=10), (B=3,G=2,R=1)
+        let buf = [30u8, 20, 10, 255, 3, 2, 1, 255];
+        let image = bgra_to_rgb(&buf, 2, 1, 8).expect("convert");
+        assert_eq!(image.get_pixel(0, 0).0, [10, 20, 30]);
+        assert_eq!(image.get_pixel(1, 0).0, [1, 2, 3]);
+    }
 }

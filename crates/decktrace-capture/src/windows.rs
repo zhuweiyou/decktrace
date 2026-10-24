@@ -3,7 +3,8 @@
 //! 先保留 `Platform` / `WindowService` 结构，后续接 Windows Graphics Capture
 //! 或 PrintWindow。当前所有操作都会返回明确的“尚未实现”。
 
-use decktrace_tracking::{CaptureError, CaptureStream, Platform, WindowInfo, WindowService};
+use crate::{CaptureError, CaptureStream, Platform, WindowInfo, WindowService};
+use decktrace_tracking::WindowSelector;
 
 pub struct WindowsPlatform {
     windows: WindowsWindowService,
@@ -46,10 +47,7 @@ impl WindowService for WindowsWindowService {
         ))
     }
 
-    fn find_window(
-        &self,
-        _selector: &decktrace_tracking::WindowSelector,
-    ) -> Result<WindowInfo, CaptureError> {
+    fn find_window(&self, _selector: &WindowSelector) -> Result<WindowInfo, CaptureError> {
         Err(CaptureError::Unsupported(
             "Windows 窗口枚举尚未实现".to_string(),
         ))

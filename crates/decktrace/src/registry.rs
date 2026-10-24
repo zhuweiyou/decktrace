@@ -3,7 +3,11 @@ use decktrace_tracking::GameProfile;
 /// 游戏注册表。新增游戏时在这里加一个分支，并新建 `decktrace-game-xxx` crate。
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
     match id {
-        "jj" => Ok(decktrace_jj::profile()),
+        "jj" => {
+            let game = decktrace_jj::profile();
+            game.validate()?;
+            Ok(game)
+        }
         other => Err(format!(
             "未知游戏：{other}，可用：{}",
             list_games()

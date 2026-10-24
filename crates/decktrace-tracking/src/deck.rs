@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::Detection;
@@ -10,7 +10,6 @@ pub struct TrackerSnapshot {
     pub seen_ids: BTreeSet<String>,
     pub seen_count: usize,
     pub remaining: usize,
-    pub recent: Vec<Detection>,
     /// 已在底牌区确认、但尚未打出的牌；仍计入 remaining。
     pub bottom_ids: BTreeSet<String>,
     /// 是否已识别到约定的底牌并正式开始记牌。
@@ -32,7 +31,6 @@ pub struct CardTracker {
     seen_ids: BTreeSet<String>,
     bottom_ids: BTreeSet<String>,
     seen_by_rank: HashMap<String, usize>,
-    recent: VecDeque<Detection>,
     pending: HashMap<String, Pending>,
     armed: bool,
     bottom_count: usize,
@@ -62,7 +60,6 @@ impl CardTracker {
             seen_ids: BTreeSet::new(),
             bottom_ids: BTreeSet::new(),
             seen_by_rank: HashMap::new(),
-            recent: VecDeque::new(),
             pending: HashMap::new(),
             armed,
             bottom_history: Vec::new(),
@@ -73,7 +70,6 @@ impl CardTracker {
         self.seen_ids.clear();
         self.bottom_ids.clear();
         self.seen_by_rank.clear();
-        self.recent.clear();
         self.pending.clear();
         self.armed = self.bottom_count == 0;
         self.bottom_history.clear();
@@ -85,6 +81,10 @@ impl CardTracker {
 
     pub fn seen_ids(&self) -> &BTreeSet<String> {
         &self.seen_ids
+    }
+
+    pub fn seen_count(&self) -> usize {
+        self.seen_ids.len()
     }
 
     pub fn bottom_ids(&self) -> &BTreeSet<String> {
@@ -190,9 +190,8 @@ impl CardTracker {
             }
         }
 
-        for card_id in self.seen_ids.clone() {
-            self.pending.remove(&card_id);
-        }
+        self.pending
+            .retain(|card_id, _| !self.seen_ids.contains(card_id));
         self.bottom_ids.retain(|id| !self.seen_ids.contains(id));
         committed
     }
@@ -204,10 +203,6 @@ impl CardTracker {
         }
         self.seen_ids.insert(card_id.clone());
         *self.seen_by_rank.entry(det.rank.clone()).or_insert(0) += 1;
-        self.recent.push_back(det.clone());
-        while self.recent.len() > self.game.recent_limit {
-            self.recent.pop_front();
-        }
         // 底牌真正打出（或进入自己的手牌）后，不再参与底牌标记。
         self.bottom_ids.remove(&card_id);
     }
@@ -233,7 +228,6 @@ impl CardTracker {
             seen_ids: self.seen_ids.clone(),
             seen_count: self.seen_ids.len(),
             remaining: self.remaining(),
-            recent: self.recent.iter().cloned().collect(),
             bottom_ids: self.bottom_ids.clone(),
             armed: self.armed,
         }

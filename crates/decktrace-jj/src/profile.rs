@@ -124,8 +124,5 @@ pub fn profile() -> GameProfile {
         reset,
         // 三张底牌固定在顶部偏左；其他游戏可以给不同区域或自定义 BottomSpec。
         bottom: Some(Arc::new(BottomConfig::new((0.33, 0.08, 0.47, 0.20), 3, 2))),
-        recent_limit: 12,
-        default_source: "image".to_string(),
-        supported_sources: vec!["image".to_string()],
     }
 }

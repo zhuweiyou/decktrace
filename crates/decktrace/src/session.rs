@@ -10,13 +10,6 @@ use anyhow::Result;
 use decktrace_capture::{CaptureStream, Platform, WindowInfo};
 use decktrace_tracking::{CardTracker, Detection, GameProfile, SharedRecognizer, TrackerSnapshot};
 
-pub struct Tick {
-    pub snapshot: TrackerSnapshot,
-    pub detections: Vec<Detection>,
-    pub image: image::RgbImage,
-    pub recognition_ms: f64,
-}
-
 struct AutoReset {
     enabled: bool,
     prev_hand_ids: BTreeSet<String>,
@@ -73,7 +66,7 @@ impl AutoReset {
             return None;
         }
 
-        let seen = tracker.snapshot().seen_count;
+        let seen = tracker.seen_count();
         let jump = self.prev_hand_count <= cfg.empty_hand_threshold
             && hand_ids.len() >= cfg.min_hand_for_jump
             && seen > 0;
@@ -118,6 +111,26 @@ impl AutoReset {
     }
 }
 
+pub struct SessionConfig {
+    pub fps: f32,
+    pub min_hits: usize,
+    pub instant_score: f32,
+    pub pending_ttl: f64,
+    pub auto_reset: bool,
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            fps: 15.0,
+            min_hits: 2,
+            instant_score: 0.92,
+            pending_ttl: 1.6,
+            auto_reset: true,
+        }
+    }
+}
+
 /// 一局实时会话：采集、识别、底牌门控、自动重置。
 pub struct Session {
     game: Arc<GameProfile>,
@@ -137,19 +150,22 @@ impl Session {
         platform: &dyn Platform,
         game: GameProfile,
         window: &WindowInfo,
-        fps: f32,
-        min_hits: usize,
-        auto_reset: bool,
         recognizer: SharedRecognizer,
+        config: SessionConfig,
     ) -> Result<Self> {
-        let stream = platform.create_capture_stream(window, fps)?;
+        let stream = platform.create_capture_stream(window, config.fps)?;
         let game = Arc::new(game);
-        let tracker = CardTracker::new(game.clone(), min_hits, 0.92, 1.6);
+        let tracker = CardTracker::new(
+            game.clone(),
+            config.min_hits,
+            config.instant_score,
+            config.pending_ttl,
+        );
         Ok(Self {
             game,
             recognizer,
             tracker,
-            auto_reset: AutoReset::new(auto_reset),
+            auto_reset: AutoReset::new(config.auto_reset),
             stream,
             started: Instant::now(),
             frames: 0,
@@ -165,7 +181,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn tick(&mut self, timeout: Duration) -> Result<Option<Tick>> {
+    pub fn tick(&mut self, timeout: Duration) -> Result<Option<TrackerSnapshot>> {
         let frame = match self.stream.read(timeout) {
             Ok(frame) => frame,
             Err(err) => {
@@ -190,12 +206,7 @@ impl Session {
             now,
         );
         self.tracker.observe(&result.detections, now);
-        Ok(Some(Tick {
-            snapshot: self.tracker.snapshot(),
-            detections: result.detections,
-            image: frame.image,
-            recognition_ms: result.elapsed_ms,
-        }))
+        Ok(Some(self.tracker.snapshot()))
     }
 
     pub fn reset(&mut self) {
