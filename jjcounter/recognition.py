@@ -229,47 +229,72 @@ class CardRecognizer:
     def _detect_jokers(
         self, image: np.ndarray, combined: np.ndarray, red: np.ndarray, dark: np.ndarray
     ) -> List[Detection]:
+        """在三个固定高度带里找大小王。
+
+        手牌/出牌区/底牌栏的 JOK 尺寸不同，全图多尺度匹配会占掉
+        80% 的识别时间。这里按画面高度分带，并只尝试各带常见的尺度。
+        """
+
         detections: List[Detection] = []
         if self.joker_template is None:
             return detections
 
-        # 手牌/出牌区用大模板；底牌栏的小王被压扁，用紧凑模板，
-        # 并且只搜索画面上部，避免多尺度全图匹配拖慢识别。
-        templates = [
-            (self.joker_template, (0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 1.00, 1.10), 0),
-        ]
+        height, width = combined.shape
+        base_scale = width / 1800.0
+        bands = []
         if self.joker_compact is not None:
-            templates.append(
-                (
-                    self.joker_compact,
-                    (0.85, 0.95, 1.00, 1.05, 1.15),
-                    min(combined.shape[0], max(int(combined.shape[0] * 0.28), 220)),
-                )
+            # 底牌栏：压缩字形，画面上部
+            bands.append(
+                (0.00, 0.22, self.joker_compact, (0.90, 1.00, 1.10))
             )
+        # 出牌区：约为手牌尺寸的 0.6 倍
+        bands.append(
+            (0.22, 0.50, self.joker_template, (0.54, 0.60, 0.66, 0.72))
+        )
+        # 手牌区
+        bands.append(
+            (0.62, 1.00, self.joker_template, (0.92, 1.00, 1.08))
+        )
 
-        for source, scales, y_limit in templates:
+        for top_ratio, bottom_ratio, source, scale_priors in bands:
+            y0 = int(height * top_ratio)
+            y1 = min(height, int(height * bottom_ratio))
+            if y1 <= y0 + 10:
+                continue
+            search = combined[y0:y1, :]
             base_h = source.shape[0]
-            search = combined[:y_limit, :] if y_limit else combined
-            for scale in scales:
-                height = max(12, round(base_h * scale))
-                width = max(6, round(source.shape[1] * height / base_h))
-                if height >= search.shape[0] or width >= search.shape[1]:
+            for prior in scale_priors:
+                scale = prior * base_scale
+                template_h = max(12, round(base_h * scale))
+                template_w = max(
+                    6, round(source.shape[1] * template_h / base_h)
+                )
+                if template_h >= search.shape[0] or template_w >= search.shape[1]:
                     continue
                 template = cv2.resize(
-                    source, (width, height), interpolation=cv2.INTER_AREA
+                    source, (template_w, template_h), interpolation=cv2.INTER_AREA
                 )
                 _n, template = cv2.threshold(template, 96, 255, cv2.THRESH_BINARY)
-                result = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
+                result = cv2.matchTemplate(
+                    search, template, cv2.TM_CCOEFF_NORMED
+                )
                 ys, xs = np.where(result >= 0.62)
-                for y, x in zip(ys, xs):
-                    y = int(y)
-                    score = float(result[y, x])
-                    red_count = int((red[y:y + height, x:x + width] > 0).sum())
-                    dark_count = int((dark[y:y + height, x:x + width] > 0).sum())
+                for yy, xx in zip(ys, xs):
+                    score = float(result[yy, xx])
+                    x = int(xx)
+                    y = int(yy) + y0
+                    red_count = int(
+                        (red[y:y + template_h, x:x + template_w] > 0).sum()
+                    )
+                    dark_count = int(
+                        (dark[y:y + template_h, x:x + template_w] > 0).sum()
+                    )
                     if max(red_count, dark_count) < 50:
                         continue
                     rank = "BJ" if red_count > dark_count else "SJ"
-                    face = self._face_fraction(image, x, y, width, height)
+                    face = self._face_fraction(
+                        image, x, y, template_w, template_h
+                    )
                     if face < FACE_MIN_FRACTION:
                         continue
                     detections.append(
@@ -277,7 +302,7 @@ class CardRecognizer:
                             rank=rank,
                             suit="",
                             score=score,
-                            box=(int(x), int(y), width, height),
+                            box=(x, y, template_w, template_h),
                             rank_score=score,
                             suit_score=1.0,
                             face_score=face,

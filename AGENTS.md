@@ -51,7 +51,7 @@
 
 每一步都要有可见产物：
 
-- `frames/latest.png`：输入
+- `frames/latest.jpg`（或 png）：输入
 - `frames/annotated.png`：识别框
 - 终端/`state.json`：识别结果与计数
 - 测试：固定样本的期望结果
@@ -175,7 +175,7 @@
 - 牌面是竖排 `JOK` + `大/小`。
 - 用竖排文字模板检测，红/黑颜色区分大王/小王。
 - **底牌栏的小王是压缩绘制**：手牌模板比例 41x130，底牌实际约 27x46，必须单独提取紧凑模板。
-- 紧凑模板只搜索画面上部，避免全图多尺度匹配拖慢速度。
+- 紧凑模板只搜索底牌栏高度带；手牌/出牌区也按高度带搜索，避免全图多尺度匹配。
 
 ### 4.6 不要做全图多尺度滑窗
 
@@ -292,7 +292,8 @@ CaptureProducer ──截图 + imread──> Queue(maxsize=N) ──> Recognitio
 - Retina 截图是逻辑尺寸的 2x；用 `image_width / window.width` 计算 scale。
 - 窗口最小化无法截图；被其他窗口遮挡通常能截到内容，但完全遮挡时系统可能降低刷新率。
 - 屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统音频录制；授权后重启终端应用。
-- 不要把 ScreenCaptureKit 当作默认方案；当前 `screencapture` 单帧约 100–160ms，足够 2–3 fps。
+- PNG 单帧约 140ms，JPEG 单帧约 95ms、解码约 5ms。实时模式默认 JPEG + 0.15s 间隔，实测约 5.7fps；`--interval 0.1` 约 7.7fps。
+- 若要稳定超过 8–10fps，瓶颈在 `screencapture` 每次启动进程，而不是 Python；届时应改用常驻 ScreenCaptureKit/Swift 采集，而不是重写 Python 识别。
 
 ---
 
@@ -313,7 +314,7 @@ CaptureProducer ──截图 + imread──> Queue(maxsize=N) ──> Recognitio
 - 手动重置
 - 自动重置正例/反例
 - 真实截图识别（手牌 + 底牌 + 出牌区 + 大王）
-- 底牌栏压缩小王 + 大王颜色分支回归
+- 底牌栏压缩小王、真实底牌大王、大王颜色分支回归
 
 ### 真实截图回归
 
@@ -367,7 +368,8 @@ open frames/annotated.png
 | 表格错位 | ANSI 颜色码参与宽度计算 | 先 pad 再加颜色 |
 | JSON 崩溃 | numpy int64 不可序列化 | 写 JSON 前转 int |
 | 退出后终端不回显 | cbreak 输入线程未 join | 退出时 join 并恢复 termios |
-| 识别越来越慢 | 全图多尺度模板搜索 | 锚点 + 小 ROI + 限制尺度 |
+| 识别越来越慢 | 全图多尺度模板搜索 | 锚点 + 高度带/小 ROI + 限制尺度 |
+| 2fps 上不去 | 大小王全图 8 尺度匹配 + PNG 截图 | 分带 3–4 尺度、JPEG、0.15s 间隔 |
 
 ---
 

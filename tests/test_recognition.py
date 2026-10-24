@@ -77,6 +77,16 @@ class JokerFixtureTest(unittest.TestCase):
         self.assertEqual([d.rank for d in jokers], ["SJ"])
         self.assertGreater(jokers[0].score, 0.9)
 
+    def test_real_compact_big_joker(self):
+        image = cv2.imread(str(FIXTURES / "joker_strip_bj.png"))
+        jokers = [
+            d
+            for d in self.recognizer.recognize(image).detections
+            if d.rank in ("SJ", "BJ")
+        ]
+        self.assertEqual([d.rank for d in jokers], ["BJ"])
+        self.assertGreater(jokers[0].score, 0.8)
+
     def test_big_joker_color_branch_offline(self):
         image = cv2.imread(str(FIXTURES / "joker_strip.png"))
         small = next(

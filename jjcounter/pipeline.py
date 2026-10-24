@@ -383,12 +383,14 @@ def run_counter(
     once: bool,
     color: bool,
     out_dir: Path,
+    capture_format: str = "jpg",
 ) -> int:
     capture = WindowCapture(
         title=title,
         owner=owner,
         window_id=window_id,
         interval=interval,
+        fmt=capture_format,
         output_dir=out_dir,
         max_consecutive_errors=20,
     )

@@ -266,6 +266,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         once=args.once,
         color=color,
         out_dir=Path(args.out_dir),
+        capture_format=args.capture_format,
     )
 
 
@@ -316,7 +317,13 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser(
         "run", help="实时识别并显示终端记牌表", parents=[common]
     )
-    run_parser.add_argument("--interval", type=float, default=0.5, help="采集间隔秒数，默认 0.5")
+    run_parser.add_argument("--interval", type=float, default=0.15, help="采集间隔秒数，默认 0.15（约 5–6fps）")
+    run_parser.add_argument(
+        "--capture-format",
+        choices=("jpg", "png"),
+        default="jpg",
+        help="截图格式，默认 jpg（更快）；需要无损调试时用 png",
+    )
     run_parser.add_argument("--min-hits", type=int, default=2, help="同一张牌至少出现几帧才入账，默认 2")
     run_parser.add_argument("--no-auto-reset", action="store_true", help="关闭新一局自动重置")
     run_parser.add_argument("--debug", action="store_true", help="保存识别标注图到 frames/annotated.png")
