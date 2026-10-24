@@ -2,9 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use decktrace_core::{DeckRules, RecognitionConfig, ResetConfig, SUIT_SYMBOLS, WindowSelector};
-
 use crate::bottom::BottomSpec;
+use crate::{RecognitionConfig, ResetConfig, SUIT_SYMBOLS, WindowSelector};
 
 /// 一个游戏的完整接入描述：窗口、牌堆、模板、底牌策略、重置规则。
 #[derive(Clone)]
@@ -62,24 +61,6 @@ impl GameProfile {
             format!("{rank}{symbol}")
         } else {
             rank.to_string()
-        }
-    }
-
-    pub fn deck_rules(&self) -> DeckRules {
-        let (bottom_count, bottom_stable_frames) = match &self.bottom {
-            Some(bottom) => (bottom.count(), bottom.stable_frames()),
-            None => (0, 0),
-        };
-        DeckRules {
-            total_cards: self.total_cards(),
-            rank_totals: self.rank_totals.clone(),
-            display_ranks: self.display_ranks.clone(),
-            labels: self.labels.clone(),
-            suits: self.suits.clone(),
-            recent_limit: self.recent_limit,
-            bottom_count,
-            bottom_stable_frames,
-            reset: self.reset.clone(),
         }
     }
 

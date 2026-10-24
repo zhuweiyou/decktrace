@@ -10,16 +10,13 @@ name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-decktrace-session = { path = "../decktrace-session" }
 decktrace-capture = { path = "../decktrace-capture" }
+decktrace-recognition = { path = "../decktrace-recognition" }
+decktrace-game-jj = { path = "../decktrace-game-jj" }
 decktrace-core = { path = "../decktrace-core" }
-decktrace-game-spec = { path = "../decktrace-game-spec" }
-decktrace-games = { path = "../decktrace-games" }
 anyhow.workspace = true
 clap.workspace = true
 crossbeam-channel.workspace = true
 eframe.workspace = true
 image.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
-decktrace-capture-macos = { path = "../decktrace-capture-macos" }

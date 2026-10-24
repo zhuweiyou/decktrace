@@ -1,8 +1,10 @@
-use decktrace_core::{CardTracker, Detection};
+use std::sync::Arc;
+
+use decktrace_core::{CardTracker, Detection, GameProfile};
 use decktrace_game_jj::profile;
 
-fn rules() -> decktrace_core::DeckRules {
-    profile().deck_rules()
+fn game() -> GameProfile {
+    profile()
 }
 
 fn det(rank: &str, suit: &str, bottom: bool) -> Detection {
@@ -30,7 +32,7 @@ macro_rules! bottom {
 }
 
 fn armed_tracker(min_hits: usize) -> CardTracker {
-    let mut tracker = CardTracker::new(rules(), min_hits, 0.92, 1.6);
+    let mut tracker = CardTracker::new(Arc::new(game()), min_hits, 0.92, 1.6);
     let cards = bottom![("4", "S"), ("4", "D"), ("4", "C")];
     tracker.observe(&cards, 0.0);
     tracker.observe(&cards, 0.1);
@@ -40,7 +42,7 @@ fn armed_tracker(min_hits: usize) -> CardTracker {
 
 #[test]
 fn requires_three_bottom_cards_before_tracking() {
-    let mut tracker = CardTracker::new(rules(), 1, 0.92, 1.6);
+    let mut tracker = CardTracker::new(Arc::new(game()), 1, 0.92, 1.6);
     let hand = [det("A", "H", false), det("5", "H", false)];
     tracker.observe(&hand, 0.0);
     assert!(!tracker.armed());
@@ -62,7 +64,7 @@ fn requires_three_bottom_cards_before_tracking() {
 
 #[test]
 fn joker_bottom_is_tolerated_between_frames() {
-    let mut tracker = CardTracker::new(rules(), 1, 0.92, 1.6);
+    let mut tracker = CardTracker::new(Arc::new(game()), 1, 0.92, 1.6);
     let full = bottom![("BJ", ""), ("2", "H"), ("3", "H")];
     let partial = bottom![("2", "H"), ("3", "H")];
     tracker.observe(&full, 0.0);
@@ -74,7 +76,7 @@ fn joker_bottom_is_tolerated_between_frames() {
 
 #[test]
 fn bottom_cards_stay_in_remaining_until_played() {
-    let mut tracker = CardTracker::new(rules(), 1, 0.92, 1.6);
+    let mut tracker = CardTracker::new(Arc::new(game()), 1, 0.92, 1.6);
     let cards = bottom![("10", "S"), ("A", "H"), ("8", "H")];
     tracker.observe(&cards, 0.0);
     tracker.observe(&cards, 0.1);
@@ -118,9 +120,8 @@ fn reset_clears_round_and_waits_for_bottom_again() {
 
 #[test]
 fn game_without_bottom_starts_armed() {
-    let mut rules = rules();
-    rules.bottom_count = 0;
-    rules.bottom_stable_frames = 0;
-    let tracker = CardTracker::new(rules, 1, 0.92, 1.6);
+    let mut game = game();
+    game.bottom = None;
+    let tracker = CardTracker::new(Arc::new(game), 1, 0.92, 1.6);
     assert!(tracker.armed());
 }

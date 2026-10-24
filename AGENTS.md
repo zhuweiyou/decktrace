@@ -22,23 +22,19 @@
 
 ```text
 crates/
-  decktrace/                  # GUI 应用（egui），唯一发布产物；二进制 decktrace
-  decktrace-session/          # 无 UI 运行时：Session、自动重置
-  decktrace-core/             # 模型、DeckRules、CardTracker、底牌门控
-  decktrace-game-spec/        # GameProfile / BottomSpec 契约
+  decktrace-core/             # 模型、GameProfile/BottomSpec、CardTracker、底牌门控
   decktrace-game-jj/          # JJ 实现：profile、templates、cards
-  decktrace-games/            # 注册表
   decktrace-recognition/      # 模板识别
-  decktrace-capture/          # 平台 trait
-  decktrace-capture-macos/    # ScreenCaptureKit
+  decktrace-capture/          # 平台 trait + macOS ScreenCaptureKit
+  decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
 ```
 
 规则：
 
-- 每个游戏一个独立 crate：`decktrace-game-xxx`。不要把具体游戏塞进通用层。
-- 通用层只依赖 `GameProfile` / `BottomSpec` 契约。
+- 每个游戏一个独立 crate：`decktrace-game-xxx`。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
+- 通用层只依赖 `decktrace-core` 里的 `GameProfile` / `BottomSpec` 契约。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 
 ## 3. 开发命令
@@ -98,7 +94,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
 - `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
   - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
-  - `capture-macos/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
+  - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
 - 打包脚本会拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`。

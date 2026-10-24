@@ -1,8 +1,11 @@
-//! 平台抽象：窗口发现与采集流。具体平台由独立 crate 实现。
+//! 平台抽象与 macOS ScreenCaptureKit 实现。
 
 use std::time::Duration;
 
 use decktrace_core::{RawFrame, WindowInfo, WindowSelector};
+
+#[cfg(target_os = "macos")]
+pub mod macos;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

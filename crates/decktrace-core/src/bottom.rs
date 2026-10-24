@@ -1,6 +1,6 @@
 use image::RgbImage;
 
-use decktrace_core::Detection;
+use crate::Detection;
 
 /// 底牌识别策略。
 ///

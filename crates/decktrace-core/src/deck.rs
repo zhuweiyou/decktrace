@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::sync::Arc;
 
 use crate::Detection;
-use crate::rules::DeckRules;
+use crate::game::GameProfile;
 
 #[derive(Debug, Clone)]
 pub struct TrackerSnapshot {
@@ -24,7 +25,7 @@ struct Pending {
 
 /// 只认“牌 ID（点数+花色）”，同一张牌只扣一次。
 pub struct CardTracker {
-    rules: DeckRules,
+    game: Arc<GameProfile>,
     min_hits: usize,
     instant_score: f32,
     pending_ttl: f64,
@@ -40,12 +41,21 @@ pub struct CardTracker {
 }
 
 impl CardTracker {
-    pub fn new(rules: DeckRules, min_hits: usize, instant_score: f32, pending_ttl: f64) -> Self {
-        let armed = rules.bottom_count == 0;
+    pub fn new(
+        game: Arc<GameProfile>,
+        min_hits: usize,
+        instant_score: f32,
+        pending_ttl: f64,
+    ) -> Self {
+        let (bottom_count, bottom_stable) = match &game.bottom {
+            Some(bottom) => (bottom.count(), bottom.stable_frames().max(1)),
+            None => (0, 0),
+        };
+        let armed = bottom_count == 0;
         Self {
-            bottom_count: rules.bottom_count,
-            bottom_stable: rules.bottom_stable_frames.max(1),
-            rules,
+            bottom_count,
+            bottom_stable,
+            game,
             min_hits: min_hits.max(1),
             instant_score,
             pending_ttl,
@@ -195,7 +205,7 @@ impl CardTracker {
         self.seen_ids.insert(card_id.clone());
         *self.seen_by_rank.entry(det.rank.clone()).or_insert(0) += 1;
         self.recent.push_back(det.clone());
-        while self.recent.len() > self.rules.recent_limit {
+        while self.recent.len() > self.game.recent_limit {
             self.recent.pop_front();
         }
         // 底牌真正打出（或进入自己的手牌）后，不再参与底牌标记。
@@ -203,7 +213,7 @@ impl CardTracker {
     }
 
     pub fn counts(&self) -> BTreeMap<String, usize> {
-        self.rules
+        self.game
             .rank_totals
             .iter()
             .map(|(rank, total)| {
@@ -214,7 +224,7 @@ impl CardTracker {
     }
 
     pub fn remaining(&self) -> usize {
-        self.rules.total_cards.saturating_sub(self.seen_ids.len())
+        self.game.total_cards().saturating_sub(self.seen_ids.len())
     }
 
     pub fn snapshot(&self) -> TrackerSnapshot {

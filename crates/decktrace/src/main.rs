@@ -6,11 +6,10 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
+use decktrace::{Session, get_game};
 use decktrace_capture::Platform;
+use decktrace_core::GameProfile;
 use decktrace_core::{CardTracker, TrackerSnapshot};
-use decktrace_game_spec::GameProfile;
-use decktrace_games::get_game;
-use decktrace_session::Session;
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
@@ -47,7 +46,7 @@ fn main() -> Result<()> {
     let stop = Arc::new(AtomicBool::new(false));
     spawn_worker(game.clone(), window, tx, rx.clone(), stop.clone())?;
 
-    let tracker = CardTracker::new(game.deck_rules(), args.min_hits, 0.92, 1.6);
+    let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
     let initial = tracker.snapshot();
     let app = DeckApp::new(game, rx, stop, initial);
     let options = eframe::NativeOptions {
@@ -332,7 +331,7 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
 
 #[cfg(target_os = "macos")]
 fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(Box::new(decktrace_capture_macos::MacPlatform::new()?))
+    Ok(Box::new(decktrace_capture::macos::MacPlatform::new()?))
 }
 
 #[cfg(not(target_os = "macos"))]

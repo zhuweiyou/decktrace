@@ -3,12 +3,13 @@
 //! 不绑定 UI：TUI 和独立 GUI 应用都复用 `Session`。
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use decktrace_capture::{CaptureStream, Platform};
+use decktrace_core::GameProfile;
 use decktrace_core::{CardTracker, Detection, TrackerSnapshot, WindowInfo};
-use decktrace_game_spec::GameProfile;
 use decktrace_recognition::CardRecognizer;
 
 pub struct Tick {
@@ -121,7 +122,7 @@ impl AutoReset {
 
 /// 一局实时会话：采集、识别、底牌门控、自动重置。
 pub struct Session {
-    game: GameProfile,
+    game: Arc<GameProfile>,
     recognizer: CardRecognizer,
     tracker: CardTracker,
     auto_reset: AutoReset,
@@ -144,7 +145,8 @@ impl Session {
     ) -> Result<Self> {
         let recognizer = CardRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?;
         let stream = platform.create_capture_stream(window, fps)?;
-        let tracker = CardTracker::new(game.deck_rules(), min_hits, 0.92, 1.6);
+        let game = Arc::new(game);
+        let tracker = CardTracker::new(game.clone(), min_hits, 0.92, 1.6);
         Ok(Self {
             game,
             recognizer,
@@ -184,7 +186,7 @@ impl Session {
         self.last_recognition_ms = result.elapsed_ms;
         self.auto_reset.maybe_reset(
             &mut self.tracker,
-            &self.game,
+            self.game.as_ref(),
             &result.detections,
             frame.height,
             now,
@@ -207,7 +209,7 @@ impl Session {
     }
 
     pub fn game(&self) -> &GameProfile {
-        &self.game
+        self.game.as_ref()
     }
 
     pub fn auto_reset_count(&self) -> usize {

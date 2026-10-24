@@ -32,15 +32,11 @@ cargo run --release -p decktrace
 
 ```text
 crates/
-  decktrace/                  # GUI 应用（egui），唯一发布产物
-  decktrace-session/          # 无 UI 运行时：采集→识别→状态机、自动重置
-  decktrace-core/             # 模型、牌堆规则、CardTracker、底牌门控
-  decktrace-game-spec/        # 游戏接入契约：GameProfile / BottomSpec
+  decktrace-core/             # 模型、GameProfile/BottomSpec、牌堆、CardTracker
   decktrace-game-jj/          # JJ 斗地主实现：窗口、牌堆、模板、牌面素材
-  decktrace-games/            # 游戏注册表
   decktrace-recognition/      # 通用模板识别引擎
-  decktrace-capture/          # WindowService / CaptureStream / Platform trait
-  decktrace-capture-macos/    # ScreenCaptureKit 实现
+  decktrace-capture/          # 平台 trait + macOS ScreenCaptureKit
+  decktrace/                  # GUI 应用 + Session + 游戏注册表（唯一发布产物）
 scripts/
   bundle-macos.sh             # 生成 dist/decktrace.app
 ```
@@ -51,8 +47,8 @@ scripts/
 WindowService → CaptureStream → Session → CardRecognizer → CardTracker → GUI
 ```
 
-- `decktrace-session` 不依赖 clap/crossterm/egui。
-- `decktrace-game-spec` 只定义游戏契约；`decktrace-game-jj` 才是具体游戏实现。
+- `GameProfile` / `BottomSpec` 在 `decktrace-core`；`decktrace-game-jj` 只负责 JJ 实现。
+- `Session` 在 `decktrace` 的 lib 里，不依赖 UI；`main.rs` 只负责 GUI。
 - 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
 
 ## 识别规则
@@ -106,7 +102,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 
 1. `crates/decktrace-game-xxx`
 2. 实现 `GameProfile`：窗口特征、牌堆、模板目录、牌面素材、底牌策略、重置规则
-3. 在 `crates/decktrace-games` 注册表加一行
+3. 在 `crates/decktrace/src/registry.rs` 加一个分支
 
 没有底牌概念的游戏把 `bottom` 设为 `None`，tracker 会直接开始记牌。
 底牌识别方式不是通用的：可以实现自己的 `BottomSpec`。
