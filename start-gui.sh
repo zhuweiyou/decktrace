@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-exec cargo run -q --release -p decktrace-gui -- "$@"
+exec cargo run -q --release -p decktrace-ui-gui -- "$@"

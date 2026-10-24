@@ -12,7 +12,7 @@ members = [
     "crates/decktrace-ui-tui",
     "crates/decktrace-app",
     "crates/decktrace-cli",
-    "apps/decktrace-gui",
+    "crates/decktrace-ui-gui",
 ]
 
 [workspace.package]

@@ -33,8 +33,7 @@ crates/
   decktrace-ui/               # Renderer trait
   decktrace-ui-tui/           # 终端渲染
   decktrace-cli/              # CLI 二进制 decktrace
-apps/
-  decktrace-gui/              # 独立 GUI 应用 decktrace-gui
+  decktrace-ui-gui/           # 独立 GUI 应用（二进制 decktrace-gui）
 ```
 
 新增游戏时：

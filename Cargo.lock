@@ -1125,23 +1125,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "decktrace-gui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "crossbeam-channel",
- "decktrace-app",
- "decktrace-capture",
- "decktrace-capture-macos",
- "decktrace-core",
- "decktrace-game-api",
- "decktrace-games",
- "eframe",
- "image",
-]
-
-[[package]]
 name = "decktrace-recognition"
 version = "0.1.0"
 dependencies = [
@@ -1160,6 +1143,23 @@ version = "0.1.0"
 dependencies = [
  "decktrace-core",
  "decktrace-game-api",
+]
+
+[[package]]
+name = "decktrace-ui-gui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "crossbeam-channel",
+ "decktrace-app",
+ "decktrace-capture",
+ "decktrace-capture-macos",
+ "decktrace-core",
+ "decktrace-game-api",
+ "decktrace-games",
+ "eframe",
+ "image",
 ]
 
 [[package]]

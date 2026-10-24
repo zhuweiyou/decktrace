@@ -452,11 +452,11 @@ TUI/e2e 验收（显式指定，不改变默认 UI）：
 
 ## 12. Rust 重写（rust-rewrite 分支）
 
-- 新代码在 Cargo workspace：`crates/` + `apps/decktrace-gui`，Python 版保留作识别 oracle。
+- 新代码在 Cargo workspace：`crates/`（含 `decktrace-ui-gui`），Python 版保留作识别 oracle。
 - 游戏必须独立成 crate：`decktrace-game-jj` 只是 JJ；新增游戏新建
   `decktrace-game-xxx`，在 `decktrace-games` 注册表加一行。不要把具体游戏塞进通用 crate。
 - 通用层不写死底牌区域/张数：底牌识别通过 `GameProfile.bottom`（`BottomSpec`）注入。
-- TUI 和 GUI 都是独立入口，**CLI 不再有 `--ui gui`**；GUI 是 `apps/decktrace-gui` 可启动应用。
+- TUI 和 GUI 都是独立入口，**CLI 不再有 `--ui gui`**；GUI 是 `crates/decktrace-ui-gui` 可启动应用。
 - 必跑：`cargo test --release --workspace`；识别回归依赖 `shots/`，样本缺失时跳过。
 - 实时/性能验证必须用 release；debug 下识别会慢约一个数量级。
 - macOS 采集已纯 Rust 化（ScreenCaptureKit），没有 Swift helper。
