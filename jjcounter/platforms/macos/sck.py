@@ -26,9 +26,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Deque, Optional
 
-from .window import BUILD_DIR, PROJECT_ROOT, WindowInfo
+from ...core.models import WindowInfo
 
-SCK_SOURCE = PROJECT_ROOT / "tools" / "sckcap.swift"
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BUILD_DIR = PROJECT_ROOT / ".build"
+SCK_SOURCE = Path(__file__).resolve().parent / "native" / "sckcap.swift"
 SCK_BINARY = BUILD_DIR / "sckcap"
 FRAME_HEADER = struct.Struct("<4sQdIII")
 MAX_JPEG_BYTES = 16 * 1024 * 1024
@@ -39,7 +41,7 @@ class SCKError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class RawFrame:
+class JPEGFrame:
     seq: int
     timestamp: float
     width: int
@@ -96,7 +98,7 @@ class SCKCapture:
         self.proc: Optional[subprocess.Popen] = None
         self.helper_fps = 0.0
         self.stderr_tail: Deque[str] = deque(maxlen=40)
-        self._first: Optional[RawFrame] = None
+        self._first: Optional[JPEGFrame] = None
         self._stderr_thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
 
@@ -147,11 +149,14 @@ class SCKCapture:
                     pass
 
     def _read_exact(self, size: int) -> bytes:
-        assert self.proc is not None and self.proc.stdout is not None
+        proc = self.proc
+        stdout = proc.stdout if proc is not None else None
+        if stdout is None:
+            raise SCKError("采集已停止")
         chunks = []
         remaining = size
         while remaining > 0:
-            chunk = self.proc.stdout.read(remaining)
+            chunk = stdout.read(remaining)
             if not chunk:
                 raise SCKError(
                     f"采集器已退出（code={self.proc.poll()}）："
@@ -161,15 +166,16 @@ class SCKCapture:
             remaining -= len(chunk)
         return b"".join(chunks)
 
-    def _read_raw(self, timeout: float = 2.0) -> RawFrame:
-        assert self.proc is not None and self.proc.stdout is not None
-        if self._stop.is_set():
+    def _read_raw(self, timeout: float = 2.0) -> JPEGFrame:
+        proc = self.proc
+        stdout = proc.stdout if proc is not None else None
+        if proc is None or stdout is None or self._stop.is_set():
             raise SCKError("采集已停止")
-        ready, _, _ = select.select([self.proc.stdout], [], [], timeout)
+        ready, _, _ = select.select([stdout], [], [], timeout)
         if not ready:
-            if self.proc.poll() is not None:
+            if proc.poll() is not None:
                 raise SCKError(
-                    f"采集器已退出（code={self.proc.returncode}）："
+                    f"采集器已退出（code={proc.returncode}）："
                     + " | ".join(list(self.stderr_tail)[-3:])
                 )
             raise SCKError(f"等待画面超时（{timeout:g}s）")
@@ -180,13 +186,13 @@ class SCKCapture:
         if size <= 0 or size > MAX_JPEG_BYTES:
             raise SCKError(f"帧长度异常：{size}")
         jpeg = self._read_exact(size)
-        return RawFrame(seq, ts, width, height, jpeg)
+        return JPEGFrame(seq, ts, width, height, jpeg)
 
-    def take_first(self) -> Optional[RawFrame]:
+    def take_first(self) -> Optional[JPEGFrame]:
         first, self._first = self._first, None
         return first
 
-    def read(self, timeout: float = 2.0) -> RawFrame:
+    def read(self, timeout: float = 2.0) -> JPEGFrame:
         return self._read_raw(timeout=timeout)
 
     def stop(self) -> None:

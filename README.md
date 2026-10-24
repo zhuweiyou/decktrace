@@ -1,201 +1,245 @@
-# JJ 斗地主 · 图像识别记牌器
+# 跨平台斗地主图像识别记牌器
 
-macOS 微信小程序《JJ斗地主》的实时记牌器。通过窗口截图识别牌面，自动扣除自己的手牌、底牌和所有人出过的牌，在终端持续刷新每个点数还剩多少张。
+通过窗口采集识别牌面，自动扣除自己的手牌、底牌和所有人出过的牌，在 TUI 或置顶 GUI 中展示剩余牌。
 
-## 已实现
+当前 **macOS 完整可用**；Windows 已完成窗口枚举与架构预留，截图/采集后端待实现。
 
-- 自动定位 `JJ斗地主` 窗口，窗口移动/换 ID 也能重新找到
-- 常驻 ScreenCaptureKit 采集（默认 15fps，实测约 13.6fps），不再每帧启动 `screencapture`；采集与识别线程分离
-- 识别点数 + 花色，**只有点数下方存在花色才会计入**
-- 排除积分、倍数、排名、倒计时、顶部记牌器数字等纯 UI 数字
-- 同一张牌（点数 + 花色）只扣一次，底牌在顶部重复展示也不会重复扣
-- 自动识别大小王（手牌/底牌栏都能识别；底牌栏的 JOK 是压缩绘制，使用紧凑模板，红/黑颜色区分大小王）
-- Rich 带边框终端表格，0 留空，剩余越多颜色越深
-- 新一局自动重置；也可按 `r` 手动重置
-- 保存识别标注图和状态 JSON，方便排查
+## 架构
+
+目标是让 **平台、游戏、识别来源** 三件事互不影响：
+
+```text
+Platform（平台）
+  ├─ macos: ScreenCaptureKit 常驻采集 / screencapture 回退
+  └─ windows: 窗口枚举已实现，CaptureStream TODO
+
+GameProfile（游戏）
+  ├─ 窗口特征（标题/应用/尺寸）
+  ├─ 牌堆定义（每个点数几张、显示顺序、大小王标签）
+  ├─ 牌面模板目录与识别阈值
+  └─ 自动重置规则
+
+DetectionSource（识别来源）
+  ├─ image: 平台采集流 + 模板识别
+  └─ memory: 预留（内存扫描/读牌），只需产出 DetectionBatch
+
+Core（业务，完全复用）
+  ├─ CardTracker：按“点数+花色”去重、计数
+  ├─ Runtime：消费 DetectionBatch、自动重置
+  └─ UI 抽象
+      ├─ TUI：Rich 表格，显示 fps/队列等调试信息
+      └─ GUI：Qt 置顶窗口，用固定 15×30 牌面左侧条展示剩余牌
+```
+
+### UI 抽象
+
+`core/ui/` 只依赖 `TrackerSnapshot + GameProfile`：
+
+- `TuiRenderer`：Rich 表格，保留帧率、队列、识别耗时等调试信息。
+- `QtCardRenderer`：纯展示，一行牌面图片，不显示 fps；窗口默认置顶。
+- `CardFaceFactory`：读取 `games/<id>/assets/cards/<card_id>.png`，按原始 15×30
+  像素尺寸展示（最近邻，不放大）。
+- 某点数剩余 4 张齐全、或双王都在时，对应牌条反色高亮；可用
+  `--no-highlight-bombs` 关闭。
+
+当前 GUI 使用项目所有者提供的《hlddz》牌面左侧条素材。
+
+### 目录结构
+
+```text
+jjcounter/
+├── cli.py                     # list / shot / watch / run / games
+├── core/
+│   ├── models.py              # WindowInfo / WindowSelector / Detection / DetectionBatch
+│   ├── source.py              # DetectionSource 抽象
+│   ├── deck.py                # 去重计数
+│   ├── table.py               # Rich 记牌表
+│   ├── runtime.py             # 通用运行时（不依赖平台/来源）
+│   └── ui/
+│       ├── base.py            # Renderer 抽象
+│       ├── tui.py             # Rich TUI
+│       ├── qt.py              # Qt 置顶牌面窗口
+│       ├── cards.py           # 牌面图片加载
+│       └── highlight.py       # 炸弹高亮判断
+├── platforms/
+│   ├── base.py                # WindowService / CaptureStream / Platform
+│   ├── factory.py             # 按 sys.platform 选择后端
+│   ├── macos/
+│   │   ├── window.py          # native/winlist.swift
+│   │   ├── sck.py             # ScreenCaptureKit 二进制帧客户端
+│   │   ├── capture.py         # SCK / screencapture 两条采集流
+│   │   ├── legacy.py          # 单帧 screencapture
+│   │   └── native/            # winlist.swift / sckcap.swift
+│   └── windows/
+│       ├── window.py          # ctypes EnumWindows（实验性）
+│       ├── capture.py         # TODO：CaptureStream 实现
+│       └── platform.py
+├── games/
+│   ├── base.py                # GameProfile / RecognitionConfig / ResetConfig
+│   ├── registry.py            # 游戏注册表
+│   └── jj/
+│       ├── profile.py         # JJ 斗地主配置
+│       ├── templates/         # 识别用点数/花色/大小王模板
+│       ├── assets/cards/      # GUI 用 15×30 牌面左侧条
+│       └── build_templates.py
+├── recognition/
+│   └── engine.py              # 通用模板识别引擎（读取 GameProfile）
+└── sources/
+    ├── image.py               # 图片识别来源（采集流 + recognizer）
+    ├── memory.py              # 内存来源 TODO
+    └── factory.py
+```
 
 ## 快速开始
 
 ```bash
 cd /Users/yiyi/work/jjddz
-
-# 首次安装依赖（国内网络建议用清华镜像）
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt \
   -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-# 开始记牌
-./start.sh run
-```
-
-`./start.sh` 不带参数时默认执行 `run`，所以也可以直接：
-
-```bash
 ./start.sh
 ```
 
 运行后：
 
-- 按 `r`：重置本局
-- 按 `q` 或 `Ctrl+C`：退出
-- 表格会自动更新；新一局开始时通常会自动清空
+- `r`：重置本局
+- `q` / `Ctrl+C`：退出
 
-### 第一次使用 / 找不到窗口
-
-```bash
-./start.sh list
-```
-
-`→` 标出标题精确为 `JJ斗地主` 的窗口。如果有多个同名窗口，可以指定：
+常用命令：
 
 ```bash
-./start.sh run --window-id 3552
+./start.sh games                         # 查看已注册游戏
+./start.sh list                          # 查看窗口
+./start.sh list --game jj                # 按游戏窗口特征标记
+./start.sh shot --out shots/now.png      # 单张截图
+./start.sh run --debug                   # TUI 实时记牌 + 标注图
+./start.sh run --once --debug            # 单帧自检
+./start.sh watch --interval 0.5          # 只采集、不识别
 ```
 
-### 单帧自检
+### GUI（置顶牌面窗口）
+
+GUI 需要额外安装 Qt：
 
 ```bash
-./start.sh run --once --debug
+.venv/bin/python -m pip install -r requirements-gui.txt   -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+./start.sh run --ui gui
 ```
 
-会抓一帧、识别、打印表格，并保存标注图到 `frames/annotated.png`。
+- 固定窗口宽度，正好放下 54 张 15×30 牌条
+- 一行排列，牌条相邻、无间距
+- 默认窗口置顶：`--no-topmost` 可关闭
+- 不显示 fps/队列，只展示剩余牌
+- 炸弹/王炸反色高亮：`--no-highlight-bombs` 可关闭
 
-### 调试模式
+TUI 仍是默认，方便调试：
 
 ```bash
-./start.sh run --debug
+./start.sh run            # TUI
+./start.sh run --ui gui   # GUI
 ```
 
-实时保存：
+### 平台/采集后端
 
-- `frames/annotated.png`：最近一帧的识别框
-- `frames/state.json`：当前已识别的牌、剩余数量、置信度、检测框
-- `frames/latest.jpg`：原始截图（`--capture-format png` 时是 `latest.png`）
+```bash
+# 默认：自动选择 SCK，失败回退 screencapture
+./start.sh run
 
-## 终端表格
+# 强制 ScreenCaptureKit
+./start.sh run --capture-backend sck
 
-```text
-JJ 斗地主 · 记牌器    已识别 20/54   剩余 34 张
-╭──────┬──────┬───┬───┬───┬───┬───┬────┬───┬───┬───┬───┬───┬───┬───╮
-│ 大王 │ 小王 │ 2 │ A │ K │ Q │ J │ 10 │ 9 │ 8 │ 7 │ 6 │ 5 │ 4 │ 3 │
-├──────┼──────┼───┼───┼───┼───┼───┼────┼───┼───┼───┼───┼───┼───┼───┤
-│      │      │ 2 │ 2 │ 2 │ 2 │ 3 │ 2  │ 2 │ 3 │ 3 │ 3 │ 3 │ 4 │ 3 │
-╰──────┴──────┴───┴───┴───┴───┴───┴────┴───┴───┴───┴───┴───┴───┴───╯
-最近入账：大王  小王  2♥  2♦  A♠  A♥  ...
-13.6fps · 识别 15ms · 队列 0 · 延迟 0.1s · 错 0 · 重置 1
-颜色越深 = 剩余越多；0 不显示    r 重置本局    Ctrl+C 退出
+# 强制传统 screencapture
+./start.sh run --capture-backend legacy
+
+# 指定平台（Windows 采集目前会明确报 TODO）
+./start.sh list --platform windows
 ```
 
-- `已识别 20/54`：已经确认出现过的牌（按点数+花色去重）
-- `剩余 34 张`：54 - 已识别
-- 每个点数下面是还没出现过的张数；0 直接留空
-- 剩余越多颜色越深：1 浅蓝、2 中蓝、3 蓝、4 深蓝
+macOS 采集配置：
+
+```bash
+./start.sh run --capture-fps 15 --capture-quality 0.88
+```
+
+## 当前性能
+
+- 常驻 ScreenCaptureKit：配置 15fps，实测约 **13.6–14fps**
+- 双王确认后识别单帧约 **15–25ms**
+- 未确认双王时大小王隔帧检测，约 **95ms/帧**
+- 队列只保留 3 帧，延迟约 **0.1–0.3s**
+- Rich 表格每 0.12s 刷新一次
+- GUI 更新只重绘牌条，不显示 fps
+
+采集与识别线程分离；识别慢不会拖慢采集，队列满会丢最旧帧。
 
 ## 识别规则
 
-1. 先用颜色找出红色/黑色的小块（花色候选）。
-2. 花色正上方必须存在点数。
-3. 点数和花色都要通过模板匹配。
+1. 用颜色掩码找红色/黑色花色候选；
+2. 花色正上方必须存在点数；
+3. 点数和花色都通过模板匹配；
 4. 周围必须是浅色卡面。
 
-因此，像 `750`、`排名 802/2400`、`倍数 3`、倒计时 `15` 这类没有花色的数字不会入账。
+所以积分、倍数、排名、倒计时、顶部记牌器数字都不会被当成牌。
 
-牌堆按标准 54 张计算：每个点数 4 张，大小王各 1 张。牌的 ID 是“点数+花色”，所以：
+牌的身份是 `点数+花色`（如 `AH`、`10S`、`BJ`、`SJ`），同一张牌只扣一次。底牌在顶部重复展示也会自动去重。
 
-- 自己的手牌只扣一次
-- 底牌在顶部展示、如果又出现在手牌里，只扣一次
-- 上家出过的牌、自己出过的牌都不会重复扣
-- 大小王单独占一列
+## 换游戏
 
-## 自动重置怎么判断
+新增一个游戏只需要：
 
-程序用两个信号判断新一局：
+1. 新建 `jjcounter/games/<id>/profile.py`，定义 `GameProfile`：
+   - 窗口标题/应用名
+   - `rank_totals`、`display_ranks`、`labels`
+   - 识别模板目录、大小王模板/区域
+   - 自动重置的手牌区域与阈值
+2. 放入对应牌面模板到 `games/<id>/templates/`（或复用现有模板）；
+3. 在 `games/registry.py` 注册；
+4. 如果窗口/采集方式有平台差异，只改对应 `platforms/<platform>/`。
 
-- 手牌数量从很少（<=5 张）突然跳到 >=15 张（结算画面后重新发牌）
-- 当前手牌和上一帧手牌的重合度低于 60%；正常出牌时手牌是上一帧的子集，重合度接近 100%，新一局随机发牌期望重合度约 30%
+业务层（去重、计数、TUI、自动重置框架）不需要改。
 
-满足任一条件就清空上一局。如果识别环境变化导致没有自动重置，按 `r` 手动重置即可。
+## 换识别来源（例如内存读牌）
 
-## 采集与识别是分开的
+实现 `DetectionSource`：
 
-```text
-sckcap(Swift 常驻) ──二进制 JPEG 帧(stdout)──> 采集线程 ──解码──> 有界队列(3)
-                                                              │
-                                                              ▼
-                                                    识别线程 ──> 去重/计数 ──> 终端表格
+```python
+class MemoryDetectionSource(DetectionSource):
+    def start(self): ...
+    def read(self, timeout): return DetectionBatch(...)
+    def stop(self): ...
+    def stats(self): ...
 ```
 
-常驻 helper 通过 stdout 发送带长度前缀的 JPEG 帧，Python 直接解码，不经过磁盘。
+把 `DetectionBatch.detections` 填成 `Detection(rank, suit, score, box)` 即可；`meta={"new_round": True}` 可以通知运行时重置。`core/deck.py`、`core/runtime.py`、`core/table.py` 全部复用。
 
-- 未确认双王时：大小王检测隔帧执行，单帧约 95ms
-- 双王都已确认后：单帧约 15ms
-- 有界队列只保留最新 3 帧，识别跟不上时丢旧帧，延迟保持在 0.1–0.3s
-- 实测采集约 13.6fps，终端表格每 0.12s 刷新一次
+## Windows 状态
 
-## 其他命令
+- `platforms/windows/window.py` 已用 ctypes 实现窗口枚举（实验性，未在 Windows 实机验证）。
+- `platforms/windows/capture.py` 是明确的 TODO：保留 `CaptureStream` 接口，后续接 Windows Graphics Capture / PrintWindow / ImageGrab。
+- 在 Windows 上运行截图/实时记牌会得到明确的“后端尚未实现”错误，不会静默失败。
+
+## 测试
 
 ```bash
-# 查看窗口
-./start.sh list
-
-# 截一张图
-./start.sh shot --out shots/now.png
-
-# 只截图、不识别，持续采集
-./start.sh watch --interval 0.5
-
-# 需要无损帧做调试时（走 legacy 截图）
-./start.sh run --capture-backend legacy --capture-format png
-
-# 常驻采集帧率/质量
-./start.sh run --sck-fps 15 --sck-quality 0.88
-
-# 保留每一帧
-./start.sh watch --save-all --out-dir frames/session1
+.venv/bin/python -m unittest discover -s tests -v
 ```
 
-## 目录结构
+覆盖：牌堆去重、帧内去重、自动重置正反例、真实截图识别、底牌大小王、窗口选择、游戏注册表、炸弹高亮。
 
-```text
-jjcounter/
-├── window.py        # 窗口枚举/定位（编译 tools/winlist.swift）
-├── capture.py       # screencapture 单帧/连续采集（legacy 回退）
-├── sck.py           # 常驻 ScreenCaptureKit 二进制帧流客户端
-├── recognition.py   # 点数+花色识别、大小王模板
-├── counter.py       # 54 张牌去重、剩余数、终端表格
-├── pipeline.py      # 采集线程 + 队列 + 识别线程 + 自动重置
-├── cli.py           # list / shot / watch / run
-└── templates/       # 从真实截图提取的牌面模板（约 76KB）
-
-tools/sckcap.swift    # 常驻 ScreenCaptureKit 采集器
-
-start.sh             # 优先使用 .venv 的启动脚本
-tests/               # 去重、自动重置、模板识别测试
-
-tools/
-├── winlist.swift        # CoreGraphics 窗口枚举
-└── build_templates.py   # 从 shots/ 样本生成模板（开发用）
-```
+> 开局时所有点数都可能有 4 张剩余，因此整排都会反色；这是“可能存在炸弹”的字面结果。
+> 如果只想看少量高亮，后续可以增加“剩余牌总数低于阈值才高亮”的策略。
 
 ## 已知限制
 
-- 默认用常驻 ScreenCaptureKit 采集；如果启动失败（权限/系统版本），会自动回退到每帧 `screencapture`。
-- 窗口最小化后无法采集；窗口完全被其他窗口遮住时，系统可能降低该窗口的刷新率，建议让游戏窗口保持可见。
-- 程序从一局中间启动时，无法知道启动前已经出过的牌；要完整记一局，请在发牌/开局前启动，或按 `r` 重置。
-- 当前按标准 54 张牌、每个点数 4 张计算。如果玩的是多副牌/特殊模式，需要按模式调整牌堆总数。
-- 识别基于当前小程序的牌面字体模板。游戏更新换字体/皮肤后，需要重新抓样本并运行 `tools/build_templates.py`。
-- 极快的一手牌（停留不足 1 帧）可能漏记；实际对局中出牌区通常会停留数秒。
+- 窗口最小化后无法采集；完全遮挡时系统可能降低刷新率，建议保持游戏窗口可见。
+- 程序从一局中间启动时，无法补回启动前已经出过的牌；请在发牌/开局前启动，或按 `r` 重置。
+- 当前 JJ 牌堆按标准 54 张、每点数 4 张计算；特殊模式需要新 profile。
+- 模板与游戏皮肤绑定；换字体/皮肤后运行：
 
-## 常见问题
+  ```bash
+  .venv/bin/python -m jjcounter.games.jj.build_templates
+  ```
 
-**截图报权限错误？**
-
-`系统设置 → 隐私与安全性 → 屏幕与系统音频录制`，允许终端/iTerm/DeepSeek Harness，然后重启该应用。
-
-**识别不到牌？**
-
-先运行 `./start.sh run --once --debug`，打开 `frames/annotated.png` 看框是否套在牌上。若没有框，检查窗口是否被遮挡、游戏是否换了皮肤/字体。
-
-**数字会被误判成牌吗？**
-
-不会。识别逻辑是“先找到花色，再向上找点数”，只有二者同时成立才算牌；纯积分/排名数字会因为没有花色被排除。
+- Windows 截图尚未实现；macOS 需要屏幕录制权限。

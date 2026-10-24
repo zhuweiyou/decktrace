@@ -7,7 +7,8 @@
 
 ## 1. 项目目标与不可破坏的约束
 
-目标：持续截取微信小程序《JJ斗地主》窗口，识别画面中出现的牌，按“点数 + 花色”去重后，在终端显示每个点数剩余张数。
+目标：持续截取微信小程序《JJ斗地主》窗口，识别画面中出现的牌，按“点数 + 花色”去重后，
+通过 TUI 或 GUI 展示剩余牌。平台、游戏、识别来源、UI 都必须可替换。
 
 必须保持的产品约束：
 
@@ -187,7 +188,7 @@
 模板来自当前小程序字体/皮肤。游戏更新后如果字体变了，需要重新抓样本并运行：
 
 ```bash
-.venv/bin/python tools/build_templates.py
+.venv/bin/python -m jjcounter.games.jj.build_templates
 ```
 
 ---
@@ -255,29 +256,32 @@ card_id = rank + suit
 已采用结构：
 
 ```text
-sckcap(Swift, 常驻) ──二进制 JPEG 帧(stdout)──> SCKCaptureProducer
-                                                   │
-                                                   ▼
-                                       Queue(maxsize=3) ──> RecognitionWorker
-                                                                │
-                                                                └──> 终端表格 / state.json
+Platform.CaptureStream ──RawFrame(BGR)──> ImageDetectionSource
+                                              │  (图片模板识别，3 帧队列)
+                                              ▼
+                                     DetectionBatch
+                                              │
+                                              ▼
+                                  Core Runtime（去重/自动重置）
+                                              │
+                              ┌───────────────┴───────────────┐
+                              ▼                               ▼
+                        TuiRenderer                     QtCardRenderer
+                     （fps/队列/表格）              （置顶 54 张牌条，无 fps）
 ```
 
 原则：
 
+- 平台只负责窗口和 `CaptureStream`；macOS 用常驻 ScreenCaptureKit，Windows 采集 TODO。
+- 识别来源只负责产出 `DetectionBatch`；未来内存读牌实现同一接口即可。
+- Runtime 不 import macOS/Windows，也不 import Qt/Tk。
+- UI 只消费 `TrackerSnapshot + GameProfile`；TUI 才显示 fps/队列。
+- GUI 素材按固定 15×30 展示，不缩放；炸弹/王炸反色。
 - 默认不再每帧启动 `screencapture`，而是启动一次 ScreenCaptureKit helper。
 - helper 通过 stdout 发送 `SCK1 + seq + ts + w + h + size + JPEG`，Python 直接解码，不经过磁盘。
-- 识别线程消费 numpy 图像，不依赖会被覆盖的 `latest.jpg`。
 - 队列要小（3 帧左右）；识别跟不上时丢最旧帧，保持低延迟。
-- 只有调试/兼容才走 legacy `screencapture`（`--capture-backend legacy`）。
-- `latest.jpg` 只是调试产物，约每 0.5s 原子写一次，不参与识别主链路。
-- 共享状态用锁；终端只读快照。
-- 退出时：
-
-  - 设置 stop event；
-  - join 采集/识别线程；
-  - join 键盘输入线程，恢复 `termios`；
-  - 恢复光标。
+- 共享状态用锁；UI 只读快照。
+- 退出时设置 stop event、join 采集/识别/键盘线程、关闭 UI、恢复终端。
 
 指标要可见：采集 fps、识别耗时、队列长度、丢帧、错误数、自动重置次数。
 
@@ -322,6 +326,7 @@ sckcap(Swift, 常驻) ──二进制 JPEG 帧(stdout)──> SCKCaptureProducer
 - 自动重置正例/反例
 - 真实截图识别（手牌 + 底牌 + 出牌区 + 大王）
 - 底牌栏压缩小王、真实底牌大王、大王颜色分支回归
+- 炸弹/王炸高亮判断
 
 ### 真实截图回归
 
@@ -340,6 +345,14 @@ sckcap(Swift, 常驻) ──二进制 JPEG 帧(stdout)──> SCKCaptureProducer
 open frames/annotated.png
 ```
 
+GUI 验收：
+
+```bash
+./start.sh run --ui gui
+```
+
+检查：54 张牌条能放进固定窗口、牌条相邻无间距、置顶、某点数 4 张剩余时反色。
+
 看框是否套在牌上，尤其检查：
 
 - 手牌最左/最右
@@ -353,6 +366,14 @@ open frames/annotated.png
 
 - 中文注释/文档，英文标识符。
 - 终端表格用 Rich；0 留空，剩余越多颜色越深，不要再用 ANSI 手工 pad 对齐。
+- UI 通过 `core/ui/Renderer` 抽象：TUI 和 GUI 只消费 `TrackerSnapshot + GameProfile`；
+  不要把画面渲染、fps 状态塞进 runtime 或识别来源。
+- TUI 保留 fps/队列/识别耗时；GUI 是纯牌面展示，不显示调试数据。
+- GUI 牌面素材在 `games/<id>/assets/cards/<card_id>.png`；JJ 使用用户提供的
+  15×30 左侧牌条，按原始像素尺寸展示，不放大。
+- 炸弹高亮规则：某点数剩余 4 张齐全或双王都在时反色；开局全 4 张会导致整排反色，
+  这是字面结果，可用 `--no-highlight-bombs` 关闭。
+- GUI 依赖 Qt（PySide6）为可选依赖，放在 `requirements-gui.txt`；TUI 不需要 Qt。
 - 识别、计数、采集、管线分模块，不把所有逻辑塞进一个文件。
 - 数据类用 `dataclass`；状态快照不可变或复制后传出。
 - 原子写文件；调试产物不要污染源码目录。
@@ -380,6 +401,8 @@ open frames/annotated.png
 | 2fps 上不去 | 大小王全图 8 尺度匹配 + 每帧启动 screencapture | 分带 3–4 尺度 + 常驻 ScreenCaptureKit 二进制流 |
 | 文件读写延迟 | 每帧写 latest 再读 | 常驻进程 stdout 二进制帧，Python 直接解码 |
 | 队列延迟 1s | 队列 12 且识别 10fps | SCK 队列降到 3，丢旧帧保最新 |
+| GUI 牌面丑/间距大 | 自己画牌面 + 动态缩放 | 用户提供的 15×30 牌条 + 固定窗口 + 相邻排列 |
+| 开局全部反色 | 4 张齐全就高亮，开局所有点数都齐全 | 保留开关；如需更少高亮，增加剩余总数阈值 |
 
 ---
 

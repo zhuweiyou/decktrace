@@ -1,12 +1,7 @@
-"""牌面识别：点数 + 花色成对校验。
+"""通用牌面识别引擎：点数 + 花色成对校验。
 
-核心约束：
-1. 先用红/黑像素找到花色块；
-2. 花色正上方必须找到点数；
-3. 点数、花色都要和模板匹配上；
-4. 周围必须是浅色卡面。
-
-因此“750”“排名 802/2400”“倍数 1”等纯数字不会被当成牌。
+游戏差异（模板目录、牌面高度、大小王区域、阈值）由 GameProfile 提供，
+业务层不出现具体游戏常量。
 """
 
 from __future__ import annotations
@@ -18,41 +13,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import cv2
 import numpy as np
 
-TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-RANK_ORDER = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"]
-SUIT_NAMES = {"H": "♥", "D": "♦", "S": "♠", "C": "♣"}
-REF_SUIT_HEIGHT = 45.0
-RANK_TPL_HEIGHT = 70
-RANK_MIN_SCORE = 0.55
-SUIT_MIN_SCORE = 0.60
-FACE_MIN_FRACTION = 0.25
-RANK_MARGIN = 0.08
-
-
-@dataclass(frozen=True)
-class Detection:
-    rank: str
-    suit: str
-    score: float
-    box: Tuple[int, int, int, int]
-    rank_score: float = 0.0
-    suit_score: float = 0.0
-    face_score: float = 0.0
-
-    @property
-    def card_id(self) -> str:
-        return f"{self.rank}{self.suit}" if self.suit else self.rank
-
-    @property
-    def label(self) -> str:
-        if self.rank == "SJ":
-            return "小王"
-        if self.rank == "BJ":
-            return "大王"
-        return f"{self.rank}{SUIT_NAMES.get(self.suit, self.suit)}"
-
-    def __str__(self) -> str:
-        return f"{self.label}[{self.score:.2f}]"
+from ..core.models import Detection
+from ..games.base import GameProfile
 
 
 @dataclass
@@ -64,14 +26,16 @@ class RecognitionResult:
 
 
 class CardRecognizer:
-    def __init__(self, template_dir: Optional[Path] = None) -> None:
-        base = Path(template_dir) if template_dir else TEMPLATE_DIR
+    def __init__(self, game: GameProfile) -> None:
+        self.game = game
+        self.cfg = game.recognition
+        base = Path(game.templates_dir)
         rank_dir = base / "ranks"
         suit_dir = base / "suits"
         if not rank_dir.exists() or not suit_dir.exists():
             raise FileNotFoundError(
                 f"缺少模板目录：{rank_dir} / {suit_dir}，"
-                "请先运行 tools/build_templates.py"
+                f"请先运行 {game.id} 的模板构建脚本"
             )
 
         self.ranks: Dict[str, np.ndarray] = {
@@ -82,15 +46,15 @@ class CardRecognizer:
             path.stem: cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
             for path in sorted(suit_dir.glob("*.png"))
         }
-        self.joker_template = cv2.imread(
-            str(base / "joker.png"), cv2.IMREAD_GRAYSCALE
-        )
-        # 底牌栏的小王会被压缩绘制，单独用一份紧凑模板
-        self.joker_compact = cv2.imread(
-            str(base / "joker_compact.png"), cv2.IMREAD_GRAYSCALE
-        )
-        if not self.ranks or len(self.suits) != 4 or self.joker_template is None:
-            raise FileNotFoundError("模板文件不完整")
+        self.joker_templates: Dict[str, np.ndarray] = {}
+        for name in {self.cfg.joker_template, self.cfg.joker_compact_template}:
+            if not name:
+                continue
+            template = cv2.imread(str(base / name), cv2.IMREAD_GRAYSCALE)
+            if template is not None:
+                self.joker_templates[name] = template
+        if not self.ranks or len(self.suits) != 4:
+            raise FileNotFoundError("点数或花色模板不完整")
 
     # ---------- 基础图像处理 ----------
 
@@ -113,10 +77,9 @@ class CardRecognizer:
             for x, y, w, h, area in stats[1:]
         ]
 
-    @staticmethod
-    def _normalize_rank(crop: np.ndarray) -> np.ndarray:
+    def _normalize_rank(self, crop: np.ndarray) -> np.ndarray:
         h, w = crop.shape[:2]
-        nh = RANK_TPL_HEIGHT
+        nh = self.cfg.rank_template_height
         nw = max(1, round(w * nh / h))
         resized = cv2.resize(crop, (nw, nh), interpolation=cv2.INTER_AREA)
         _n, resized = cv2.threshold(resized, 96, 255, cv2.THRESH_BINARY)
@@ -142,8 +105,6 @@ class CardRecognizer:
     def _rank_bbox(
         mask: np.ndarray, sx: int, sy: int, sw: int, sh: int
     ) -> Optional[Tuple[int, int, int, int]]:
-        """在花色正上方定位点数外框。"""
-
         y0 = max(0, sy - int(2.2 * sh))
         y1 = max(1, sy - 2)
         x0 = max(0, sx - int(0.2 * sw))
@@ -184,9 +145,7 @@ class CardRecognizer:
 
     # ---------- 分类 ----------
 
-    def _classify_rank(
-        self, crop: np.ndarray
-    ) -> Tuple[str, float, float]:
+    def _classify_rank(self, crop: np.ndarray) -> Tuple[str, float, float]:
         if crop.size == 0:
             return "", 0.0, 0.0
         normalized = self._normalize_rank(crop)
@@ -207,9 +166,7 @@ class CardRecognizer:
         second_score = scores[1][1] if len(scores) > 1 else 0.0
         return best_name, best_score, second_score
 
-    def _classify_suit(
-        self, crop: np.ndarray, color: str
-    ) -> Tuple[str, float]:
+    def _classify_suit(self, crop: np.ndarray, color: str) -> Tuple[str, float]:
         if crop.size == 0:
             return "", 0.0
         normalized = self._normalize_suit(crop)
@@ -229,55 +186,33 @@ class CardRecognizer:
     def _detect_jokers(
         self, image: np.ndarray, combined: np.ndarray, red: np.ndarray, dark: np.ndarray
     ) -> List[Detection]:
-        """在三个固定高度带里找大小王。
-
-        手牌/出牌区/底牌栏的 JOK 尺寸不同，全图多尺度匹配会占掉
-        80% 的识别时间。这里按画面高度分带，并只尝试各带常见的尺度。
-        """
-
         detections: List[Detection] = []
-        if self.joker_template is None:
+        if not self.joker_templates:
             return detections
 
         height, width = combined.shape
-        base_scale = width / 1800.0
-        bands = []
-        if self.joker_compact is not None:
-            # 底牌栏：压缩字形，画面上部
-            bands.append(
-                (0.00, 0.22, self.joker_compact, (0.90, 1.00, 1.10))
-            )
-        # 出牌区：约为手牌尺寸的 0.6 倍
-        bands.append(
-            (0.22, 0.50, self.joker_template, (0.54, 0.60, 0.66, 0.72))
-        )
-        # 手牌区
-        bands.append(
-            (0.62, 1.00, self.joker_template, (0.92, 1.00, 1.08))
-        )
-
-        for top_ratio, bottom_ratio, source, scale_priors in bands:
-            y0 = int(height * top_ratio)
-            y1 = min(height, int(height * bottom_ratio))
+        base_scale = width / max(1, self.cfg.reference_width)
+        for band in self.cfg.joker_bands:
+            source = self.joker_templates.get(band.template)
+            if source is None:
+                continue
+            y0 = int(height * band.top_ratio)
+            y1 = min(height, int(height * band.bottom_ratio))
             if y1 <= y0 + 10:
                 continue
             search = combined[y0:y1, :]
             base_h = source.shape[0]
-            for prior in scale_priors:
+            for prior in band.scales:
                 scale = prior * base_scale
                 template_h = max(12, round(base_h * scale))
-                template_w = max(
-                    6, round(source.shape[1] * template_h / base_h)
-                )
+                template_w = max(6, round(source.shape[1] * template_h / base_h))
                 if template_h >= search.shape[0] or template_w >= search.shape[1]:
                     continue
                 template = cv2.resize(
                     source, (template_w, template_h), interpolation=cv2.INTER_AREA
                 )
                 _n, template = cv2.threshold(template, 96, 255, cv2.THRESH_BINARY)
-                result = cv2.matchTemplate(
-                    search, template, cv2.TM_CCOEFF_NORMED
-                )
+                result = cv2.matchTemplate(search, template, cv2.TM_CCOEFF_NORMED)
                 ys, xs = np.where(result >= 0.62)
                 for yy, xx in zip(ys, xs):
                     score = float(result[yy, xx])
@@ -292,10 +227,8 @@ class CardRecognizer:
                     if max(red_count, dark_count) < 50:
                         continue
                     rank = "BJ" if red_count > dark_count else "SJ"
-                    face = self._face_fraction(
-                        image, x, y, template_w, template_h
-                    )
-                    if face < FACE_MIN_FRACTION:
+                    face = self._face_fraction(image, x, y, template_w, template_h)
+                    if face < self.cfg.face_min_fraction:
                         continue
                     detections.append(
                         Detection(
@@ -306,10 +239,10 @@ class CardRecognizer:
                             rank_score=score,
                             suit_score=1.0,
                             face_score=face,
+                            display=self.game.label(rank),
                         )
                     )
 
-        # 同一张王只保留最高分
         detections.sort(key=lambda d: d.score, reverse=True)
         kept: List[Detection] = []
         for det in detections:
@@ -336,7 +269,6 @@ class CardRecognizer:
         combined = cv2.bitwise_or(red, dark)
         raw: List[Detection] = []
 
-        # 花色候选：只要求“形状像花色”，后面再校验点数和卡面
         for color, mask in (("red", red), ("black", dark)):
             for sx, sy, sw, sh, area in self._components(mask):
                 if not (12 <= sw <= 80 and 12 <= sh <= 85):
@@ -355,13 +287,15 @@ class CardRecognizer:
                 suit, suit_score = self._classify_suit(
                     mask[sy:sy + sh, sx:sx + sw], color
                 )
-                if rank_score < RANK_MIN_SCORE or suit_score < SUIT_MIN_SCORE:
+                if rank_score < self.cfg.rank_min_score:
                     continue
-                if rank_score - second_score < RANK_MARGIN:
+                if suit_score < self.cfg.suit_min_score:
+                    continue
+                if rank_score - second_score < self.cfg.rank_margin:
                     continue
 
                 face = self._face_fraction(image, sx, sy, sw, sh)
-                if face < FACE_MIN_FRACTION:
+                if face < self.cfg.face_min_fraction:
                     continue
 
                 score = rank_score * 0.7 + suit_score * 0.3
@@ -374,10 +308,10 @@ class CardRecognizer:
                         rank_score=rank_score,
                         suit_score=suit_score,
                         face_score=face,
+                        display=self.game.label(rank, suit),
                     )
                 )
 
-        # 红黑掩码可能同时命中同一张牌（红心外圈会形成黑色轮廓），按位置去重
         raw.sort(key=lambda d: d.score, reverse=True)
         kept: List[Detection] = []
         for det in raw:

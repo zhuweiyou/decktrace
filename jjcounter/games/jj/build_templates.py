@@ -13,9 +13,10 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
-SHOTS = ROOT / "shots"
-OUT = ROOT / "jjcounter" / "templates"
+GAME_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = GAME_ROOT.parents[2]
+SHOTS = PROJECT_ROOT / "shots"
+OUT = GAME_ROOT / "templates"
 
 # 每张样本截图的非王手牌，从左到右
 SAMPLES: List[Tuple[str, List[str], Optional[str]]] = [

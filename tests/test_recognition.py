@@ -3,7 +3,13 @@ from pathlib import Path
 
 import cv2
 
+from jjcounter.games import get_game
+from jjcounter.games import get_game
 from jjcounter.recognition import CardRecognizer
+
+GAME = get_game("jj")
+
+GAME = get_game("jj")
 
 SHOTS = Path(__file__).resolve().parent.parent / "shots"
 
@@ -12,7 +18,7 @@ SHOTS = Path(__file__).resolve().parent.parent / "shots"
 class RecognitionTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.recognizer = CardRecognizer()
+        cls.recognizer = CardRecognizer(GAME)
 
     def test_sample_round(self):
         image = cv2.imread(str(SHOTS / "round_now.png"))
@@ -65,7 +71,7 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 class JokerFixtureTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.recognizer = CardRecognizer()
+        cls.recognizer = CardRecognizer(GAME)
 
     def test_small_joker_offline(self):
         image = cv2.imread(str(FIXTURES / "joker_strip.png"))
