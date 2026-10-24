@@ -7,8 +7,6 @@ use image::imageops::FilterType;
 use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
-use imageproc::region_labelling::{Connectivity, connected_components};
-use imageproc::template_matching::{MatchTemplateMethod, match_template_parallel};
 use thiserror::Error;
 
 use decktrace_core::{Detection, RecognitionConfig, SUIT_SYMBOLS};
@@ -34,7 +32,7 @@ pub struct RecognitionResult {
     pub frame_height: u32,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Comp {
     x: u32,
     y: u32,
@@ -99,8 +97,7 @@ impl CardRecognizer {
         let started = std::time::Instant::now();
         let timing = std::env::var("DECKTRACE_TIMING").is_ok();
         let (width, height) = image.dimensions();
-        let (red, dark) = masks(image);
-        let combined = combine(&red, &dark);
+        let (red, dark, combined) = masks(image);
         let t_masks = started.elapsed();
         let (mut kept, jokers) = rayon::join(
             || self.detect_cards(image, &red, &dark),
@@ -230,11 +227,16 @@ impl CardRecognizer {
             .ranks
             .iter()
             .map(|(name, template)| {
+                let filter = if template.width() >= normalized.width() {
+                    FilterType::Nearest
+                } else {
+                    FilterType::Triangle
+                };
                 let resized = image::imageops::resize(
                     &normalized,
                     template.width(),
                     template.height(),
-                    FilterType::Triangle,
+                    filter,
                 );
                 let a = binarize_owned(resized);
                 (name.clone(), iou(&a, template))
@@ -397,49 +399,128 @@ fn load_templates(dir: &Path) -> Result<BTreeMap<String, GrayImage>, Recognition
     Ok(templates)
 }
 
-fn masks(image: &RgbImage) -> (GrayImage, GrayImage) {
-    let (width, height) = image.dimensions();
-    let mut red = GrayImage::new(width, height);
-    let mut dark = GrayImage::new(width, height);
-    for (x, y, pixel) in image.enumerate_pixels() {
-        let [r, g, b] = pixel.0;
-        let is_red = r > 110 && (r as i32 - g as i32) > 45 && (r as i32 - b as i32) > 35;
-        let is_dark = r < 90 && g < 90 && b < 90;
-        red.put_pixel(x, y, Luma([if is_red { 255 } else { 0 }]));
-        dark.put_pixel(x, y, Luma([if is_dark { 255 } else { 0 }]));
-    }
-    (red, dark)
-}
+fn masks(image: &RgbImage) -> (GrayImage, GrayImage, GrayImage) {
+    use rayon::prelude::*;
 
-fn combine(red: &GrayImage, dark: &GrayImage) -> GrayImage {
-    ImageBuffer::from_fn(red.width(), red.height(), |x, y| {
-        let r = red.get_pixel(x, y).0[0];
-        let d = dark.get_pixel(x, y).0[0];
-        Luma([r.max(d)])
-    })
+    let (width, height) = image.dimensions();
+    let len = (width as usize) * (height as usize);
+    let mut red = vec![0u8; len];
+    let mut dark = vec![0u8; len];
+    let mut combined = vec![0u8; len];
+    red.par_iter_mut()
+        .zip(dark.par_iter_mut())
+        .zip(combined.par_iter_mut())
+        .zip(image.as_raw().par_chunks_exact(3))
+        .for_each(|(((red_px, dark_px), combined_px), rgb)| {
+            let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
+            let is_red = r > 110 && (r as i32 - g as i32) > 45 && (r as i32 - b as i32) > 35;
+            let is_dark = r < 90 && g < 90 && b < 90;
+            *red_px = if is_red { 255 } else { 0 };
+            *dark_px = if is_dark { 255 } else { 0 };
+            *combined_px = (*red_px).max(*dark_px);
+        });
+    (
+        GrayImage::from_raw(width, height, red).expect("red mask"),
+        GrayImage::from_raw(width, height, dark).expect("dark mask"),
+        GrayImage::from_raw(width, height, combined).expect("combined mask"),
+    )
 }
 
 fn components(mask: &GrayImage) -> Vec<Comp> {
-    let labels = connected_components(mask, Connectivity::Eight, Luma([0u8]));
-    let mut table: Vec<(u32, u32, u32, u32, u32)> = Vec::new();
-    for (x, y, label) in labels.enumerate_pixels() {
-        let id = label.0[0] as usize;
-        if id == 0 {
-            continue;
-        }
-        if table.len() <= id {
-            table.resize(id + 1, (u32::MAX, u32::MAX, 0, 0, 0));
-        }
-        let entry = &mut table[id];
-        entry.0 = entry.0.min(x);
-        entry.1 = entry.1.min(y);
-        entry.2 = entry.2.max(x);
-        entry.3 = entry.3.max(y);
-        entry.4 += 1;
+    // 行程编码 + 两趟并查集。二值掩码很稀疏，比逐像素通用 union-find 快很多。
+    #[derive(Clone, Copy)]
+    struct Run {
+        x0: u32,
+        x1: u32,
+        label: usize,
     }
-    table
+
+    let width = mask.width() as usize;
+    let height = mask.height() as usize;
+    let raw = mask.as_raw();
+    let mut parent: Vec<usize> = Vec::new();
+    let mut rows: Vec<Vec<Run>> = Vec::with_capacity(height);
+    let mut prev: Vec<Run> = Vec::new();
+
+    fn find(parent: &mut [usize], mut node: usize) -> usize {
+        while parent[node] != node {
+            parent[node] = parent[parent[node]];
+            node = parent[node];
+        }
+        node
+    }
+    fn union(parent: &mut [usize], a: usize, b: usize) {
+        let ra = find(parent, a);
+        let rb = find(parent, b);
+        if ra != rb {
+            parent[rb] = ra;
+        }
+    }
+
+    for y in 0..height {
+        let row = &raw[y * width..(y + 1) * width];
+        let mut current: Vec<Run> = Vec::new();
+        let mut x = 0usize;
+        while x < width {
+            while x < width && row[x] == 0 {
+                x += 1;
+            }
+            if x >= width {
+                break;
+            }
+            let start = x;
+            while x < width && row[x] != 0 {
+                x += 1;
+            }
+            let label = parent.len();
+            parent.push(label);
+            current.push(Run {
+                x0: start as u32,
+                x1: (x - 1) as u32,
+                label,
+            });
+        }
+
+        // 8 连通：上一行行程与本行行程 x 范围相差 <=1 即相连。
+        let mut i = 0usize;
+        let mut j = 0usize;
+        while i < current.len() && j < prev.len() {
+            let cur = current[i];
+            let old = prev[j];
+            if old.x0 as i32 > cur.x1 as i32 + 1 {
+                i += 1;
+            } else if cur.x0 as i32 > old.x1 as i32 + 1 {
+                j += 1;
+            } else {
+                union(&mut parent, cur.label, old.label);
+                if old.x1 <= cur.x1 {
+                    j += 1;
+                } else {
+                    i += 1;
+                }
+            }
+        }
+
+        rows.push(current.clone());
+        prev = current;
+    }
+
+    let mut stats: Vec<Option<(u32, u32, u32, u32, u32)>> = vec![None; parent.len()];
+    for (y, runs) in rows.iter().enumerate() {
+        for run in runs {
+            let root = find(&mut parent, run.label);
+            let entry = stats[root].get_or_insert((run.x0, y as u32, run.x1, y as u32, 0));
+            entry.0 = entry.0.min(run.x0);
+            entry.1 = entry.1.min(y as u32);
+            entry.2 = entry.2.max(run.x1);
+            entry.3 = entry.3.max(y as u32);
+            entry.4 += run.x1 - run.x0 + 1;
+        }
+    }
+
+    stats
         .into_iter()
-        .filter(|entry| entry.4 > 0)
+        .flatten()
         .map(|(x0, y0, x1, y1, area)| Comp {
             x: x0,
             y: y0,
@@ -498,7 +579,12 @@ fn normalize_rank(crop: &GrayImage, target_h: u32) -> GrayImage {
         return GrayImage::new(1, target_h);
     }
     let nw = ((w as f32 * target_h as f32 / h as f32).round() as u32).max(1);
-    let resized = image::imageops::resize(crop, nw, target_h, FilterType::Triangle);
+    let filter = if target_h >= h {
+        FilterType::Nearest
+    } else {
+        FilterType::Triangle
+    };
+    let resized = image::imageops::resize(crop, nw, target_h, filter);
     binarize_owned(resized)
 }
 
@@ -508,7 +594,12 @@ fn normalize_suit(crop: &GrayImage) -> GrayImage {
     let scale = (SIZE as f32 - 6.0) / w.max(h).max(1) as f32;
     let rw = ((w as f32 * scale).round() as u32).max(1);
     let rh = ((h as f32 * scale).round() as u32).max(1);
-    let resized = image::imageops::resize(crop, rw, rh, FilterType::Triangle);
+    let filter = if rw >= w && rh >= h {
+        FilterType::Nearest
+    } else {
+        FilterType::Triangle
+    };
+    let resized = image::imageops::resize(crop, rw, rh, filter);
     let mut canvas = GrayImage::new(SIZE, SIZE);
     let ox = (SIZE - rw) / 2;
     let oy = (SIZE - rh) / 2;
@@ -609,28 +700,10 @@ fn coarse_candidates(
     let small_search = image::imageops::resize(search, sw, sh, FilterType::Triangle);
     let small_template = image::imageops::resize(template, tw, th, FilterType::Triangle);
     let small_template = binarize_owned(small_template);
-    let result = match_template_parallel(
-        &small_search,
-        &small_template,
-        MatchTemplateMethod::CrossCorrelationNormalized,
-    );
 
-    let mut candidates: Vec<(u32, u32, f32)> = Vec::new();
-    for (x, y, p) in result.enumerate_pixels() {
-        let score = p.0[0];
-        if score < threshold {
-            continue;
-        }
-        if candidates.iter().any(|(cx, cy, _)| {
-            (*cx as i32 - x as i32).abs() < (tw as i32 / 2).max(2)
-                && (*cy as i32 - y as i32).abs() < (th as i32 / 2).max(2)
-        }) {
-            continue;
-        }
-        candidates.push((x, y, score));
-    }
-    candidates.sort_by(|a, b| b.2.total_cmp(&a.2));
-    candidates.truncate(8);
+    // 直接在缩小图上算 CCOEFF_NORMED：比 CCORR_NORMED 更能排除暗色 UI 误匹配。
+    let mut candidates = ccoeff_scan(&small_search, &small_template, threshold * 0.85);
+    candidates.truncate(6);
 
     let mut verified = Vec::new();
     for (x, y, _coarse_score) in candidates {
@@ -652,6 +725,75 @@ fn coarse_candidates(
         }
     }
     verified
+}
+
+/// 小图上完整扫描 CCOEFF_NORMED，返回按分数排序的局部极大值。
+fn ccoeff_scan(search: &GrayImage, template: &GrayImage, threshold: f32) -> Vec<(u32, u32, f32)> {
+    if template.width() > search.width() || template.height() > search.height() {
+        return Vec::new();
+    }
+    let n = (template.width() * template.height()) as f64;
+    let t_sum: f64 = template.as_raw().iter().map(|&v| v as f64).sum();
+    let t_mean = t_sum / n;
+    let t_var: f64 = template
+        .as_raw()
+        .iter()
+        .map(|&v| {
+            let d = v as f64 - t_mean;
+            d * d
+        })
+        .sum();
+    if t_var == 0.0 {
+        return Vec::new();
+    }
+
+    let tw = template.width() as usize;
+    let th = template.height() as usize;
+    let sw = search.width() as usize;
+    let sh = search.height() as usize;
+    let raw = search.as_raw();
+    let tpl = template.as_raw();
+    let mut hits = Vec::new();
+    for y in 0..=(sh - th) {
+        for x in 0..=(sw - tw) {
+            let mut sum = 0.0f64;
+            let mut sum2 = 0.0f64;
+            let mut cross = 0.0f64;
+            for ty in 0..th {
+                let row = (y + ty) * sw + x;
+                for tx in 0..tw {
+                    let i = raw[row + tx] as f64;
+                    sum += i;
+                    sum2 += i * i;
+                    cross += i * tpl[ty * tw + tx] as f64;
+                }
+            }
+            let mean = sum / n;
+            let var = (sum2 - sum * mean).max(0.0);
+            let cov = cross - t_mean * sum;
+            let denom = (var * t_var).sqrt();
+            if denom <= 1e-9 {
+                continue;
+            }
+            let score = (cov / denom) as f32;
+            if score < threshold {
+                continue;
+            }
+            hits.push((x as u32, y as u32, score));
+        }
+    }
+    hits.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let mut kept: Vec<(u32, u32, f32)> = Vec::new();
+    for (x, y, score) in hits {
+        if kept.iter().any(|(kx, ky, _)| {
+            (*kx as i32 - x as i32).abs() <= (tw as i32 / 2).max(2)
+                && (*ky as i32 - y as i32).abs() <= (th as i32 / 2).max(2)
+        }) {
+            continue;
+        }
+        kept.push((x, y, score));
+    }
+    kept
 }
 
 fn best_ccoeff(search: &GrayImage, template: &GrayImage) -> Option<(u32, u32, f32)> {
@@ -721,4 +863,81 @@ pub fn annotate(image: &RgbImage, detections: &[Detection]) -> RgbImage {
         );
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn brute_components(mask: &GrayImage) -> Vec<Comp> {
+        let (width, height) = mask.dimensions();
+        let mut seen = vec![false; (width * height) as usize];
+        let mut out = Vec::new();
+        for y in 0..height {
+            for x in 0..width {
+                let index = (y * width + x) as usize;
+                if seen[index] || mask.get_pixel(x, y).0[0] == 0 {
+                    continue;
+                }
+                seen[index] = true;
+                let mut stack = vec![(x, y)];
+                let (mut x0, mut y0, mut x1, mut y1) = (x, y, x, y);
+                let mut area = 0u32;
+                while let Some((cx, cy)) = stack.pop() {
+                    area += 1;
+                    x0 = x0.min(cx);
+                    y0 = y0.min(cy);
+                    x1 = x1.max(cx);
+                    y1 = y1.max(cy);
+                    for dy in -1i32..=1 {
+                        for dx in -1i32..=1 {
+                            if dx == 0 && dy == 0 {
+                                continue;
+                            }
+                            let nx = cx as i32 + dx;
+                            let ny = cy as i32 + dy;
+                            if nx < 0 || ny < 0 || nx >= width as i32 || ny >= height as i32 {
+                                continue;
+                            }
+                            let ni = (ny as u32 * width + nx as u32) as usize;
+                            if seen[ni] || mask.get_pixel(nx as u32, ny as u32).0[0] == 0 {
+                                continue;
+                            }
+                            seen[ni] = true;
+                            stack.push((nx as u32, ny as u32));
+                        }
+                    }
+                }
+                out.push(Comp {
+                    x: x0,
+                    y: y0,
+                    w: x1 - x0 + 1,
+                    h: y1 - y0 + 1,
+                    area,
+                });
+            }
+        }
+        out.sort_by_key(|c| (c.y, c.x, c.w, c.h, c.area));
+        out
+    }
+
+    #[test]
+    fn rle_components_match_bruteforce() {
+        let mut seed = 0x1234_5678u32;
+        for case in 0..80 {
+            let width = 3 + (case % 17);
+            let height = 3 + (case / 17);
+            let mut mask = GrayImage::new(width, height);
+            for y in 0..height {
+                for x in 0..width {
+                    seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+                    let on = (seed >> 28) < 6;
+                    mask.put_pixel(x, y, Luma([if on { 255 } else { 0 }]));
+                }
+            }
+            let mut actual = components(&mask);
+            actual.sort_by_key(|c| (c.y, c.x, c.w, c.h, c.area));
+            assert_eq!(actual, brute_components(&mask), "case {case}");
+        }
+    }
 }

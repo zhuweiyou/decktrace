@@ -96,6 +96,29 @@ fn bj_bottom_and_hand_jokers() {
 }
 
 #[test]
+fn live_now2_matches_python_oracle() {
+    let Some(result) = recognize("live_now2.png") else {
+        return;
+    };
+    let expected: BTreeSet<&str> = [
+        "10C", "2D", "3C", "3H", "4C", "5H", "6D", "7H", "8D", "8H", "9C", "AH", "AS", "BJ", "JH",
+        "JS", "KC", "KD", "QC", "QD",
+    ]
+    .into_iter()
+    .collect();
+    let actual: BTreeSet<String> = id_counts(&result).into_keys().collect();
+    assert_eq!(actual, expected.into_iter().map(str::to_string).collect());
+    assert_eq!(result.detections.len(), 23);
+    assert_eq!(
+        bottom_ids(&result),
+        ["10C", "8D", "AH"]
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    );
+}
+
+#[test]
 fn joker_miss_matches_python_oracle() {
     let Some(result) = recognize("joker_miss.png") else {
         return;
