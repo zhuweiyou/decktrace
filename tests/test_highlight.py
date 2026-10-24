@@ -37,6 +37,12 @@ class BombHighlightTest(unittest.TestCase):
         self.assertEqual(card_visual_state("AS", {"AH"}, bomb), "bomb")
         self.assertEqual(card_visual_state("2H", set(), set()), "normal")
 
+    def test_card_assets_complete(self):
+        factory = CardFaceFactory(GAME)
+        for card_id in GAME.all_card_ids():
+            image = factory.image(card_id, 15, 30)
+            self.assertEqual(image.size, (15, 30))
+
     def test_bottom_tint_differs_from_normal_and_inverted(self):
         factory = CardFaceFactory(GAME)
         normal = factory.image("AH", 15, 30)

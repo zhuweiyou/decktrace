@@ -399,6 +399,7 @@ TUI/e2e 验收（显式指定，不改变默认 UI）：
   底牌优先级最高，底牌色实现在 `CardFaceFactory.image(bottom=True)`。
 - GUI 牌面素材在 `games/<id>/assets/cards/<card_id>.png`；`jj` profile 使用用户提供的
   15×30 左侧牌条，按原始像素尺寸展示，不放大。
+- 牌面只用图片素材，不再保留 PIL 字体绘制兜底；缺素材直接报错，由测试保证 54 张齐全。
 - 炸弹高亮规则：某点数剩余 4 张齐全或双王都在时反色；开局全 4 张会导致整排反色，
   这是字面结果，可用 `--no-highlight-bombs` 关闭。
 - GUI 依赖 Qt（PySide6）为可选依赖，放在 `requirements-gui.txt`；TUI 不需要 Qt。

@@ -44,7 +44,7 @@ Core（业务，完全复用）
 - `TuiRenderer`：Rich 表格，保留帧率、队列、识别耗时等调试信息。
 - `QtCardRenderer`：纯展示，一行牌面图片，不显示 fps；窗口默认置顶。
 - `CardFaceFactory`：读取 `games/<id>/assets/cards/<card_id>.png`，按原始 15×30
-  像素尺寸展示（最近邻，不放大）。
+  像素尺寸展示（最近邻，不放大）；不再用 PIL 字体兜底绘制，缺素材会直接报错。
 - 某点数剩余 4 张齐全、或双王都在时，对应牌条反色高亮；可用
   `--no-highlight-bombs` 关闭。
 
