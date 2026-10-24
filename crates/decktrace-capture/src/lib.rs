@@ -8,7 +8,7 @@ pub use types::{RawFrame, WindowInfo};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", test))]
 pub mod windows;
 
 #[cfg(target_os = "macos")]

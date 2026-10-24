@@ -44,18 +44,20 @@ fn main() -> Result<()> {
 
     let (tx, rx) = bounded::<Message>(1);
     let stop = Arc::new(AtomicBool::new(false));
+    let reset = Arc::new(AtomicBool::new(false));
     spawn_worker(
         game.clone(),
         window,
         tx,
         rx.clone(),
         stop.clone(),
+        reset.clone(),
         args.min_hits,
     )?;
 
     let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
     let initial = tracker.snapshot();
-    let app = DeckApp::new(game, rx, stop, initial);
+    let app = DeckApp::new(game, rx, stop, reset, initial);
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("斗地主记牌器")
@@ -96,6 +98,7 @@ fn spawn_worker(
     tx: Sender<Message>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
+    reset: Arc<AtomicBool>,
     min_hits: usize,
 ) -> Result<()> {
     std::thread::Builder::new()
@@ -117,6 +120,9 @@ fn spawn_worker(
                 )?;
                 session.start()?;
                 while !stop.load(Ordering::Relaxed) {
+                    if reset.swap(false, Ordering::Relaxed) {
+                        session.reset();
+                    }
                     match session.tick(Duration::from_millis(200)) {
                         Ok(Some(snapshot)) => {
                             if tx.try_send(Message::Snapshot(snapshot)).is_err() {
@@ -147,6 +153,7 @@ struct DeckApp {
     game: GameProfile,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
+    reset: Arc<AtomicBool>,
     snapshot: TrackerSnapshot,
     error: Option<String>,
     sources: HashMap<String, RgbaImage>,
@@ -160,12 +167,14 @@ impl DeckApp {
         game: GameProfile,
         rx: Receiver<Message>,
         stop: Arc<AtomicBool>,
+        reset: Arc<AtomicBool>,
         snapshot: TrackerSnapshot,
     ) -> Self {
         Self {
             game,
             rx,
             stop,
+            reset,
             snapshot,
             error: None,
             sources: HashMap::new(),
@@ -225,6 +234,9 @@ impl eframe::App for DeckApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain();
         let ctx = ui.ctx().clone();
+        if ctx.input(|input| input.key_pressed(egui::Key::R)) {
+            self.reset.store(true, Ordering::Relaxed);
+        }
         let remaining = self.game.remaining_card_ids(&self.snapshot.seen_ids);
         let bombs = bomb_card_ids(&remaining, &self.game);
         let cards: Vec<(String, bool)> = remaining
@@ -240,8 +252,9 @@ impl eframe::App for DeckApp {
 
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(241, 236, 225));
-        if let Some(error) = &self.error {
-            ui.label(error);
+        if self.error.is_some() {
+            // egui 默认字体没有中文，错误详情已经在 worker 里输出到 stderr。
+            ui.label("Screen capture failed - check Screen Recording permission.");
             return;
         }
         let (rect, _) = ui.allocate_exact_size(
