@@ -55,6 +55,8 @@ class GameProfileTest(unittest.TestCase):
         self.assertEqual(set(game.display_ranks), set(game.rank_totals))
         self.assertTrue(game.templates_dir.exists())
         self.assertIn("jj", [g.id for g in list_games()])
+        self.assertIsNotNone(game.bottom)
+        self.assertEqual(game.bottom.count, 3)
 
     def test_labels(self):
         game = get_game("jj")

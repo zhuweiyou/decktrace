@@ -1,4 +1,6 @@
 from .base import (
+    BottomConfig,
+    BottomSpec,
     GameProfile,
     JokerBand,
     RecognitionConfig,
@@ -7,6 +9,8 @@ from .base import (
 from .registry import get_game, list_games, register_game
 
 __all__ = [
+    "BottomConfig",
+    "BottomSpec",
     "GameProfile",
     "JokerBand",
     "RecognitionConfig",

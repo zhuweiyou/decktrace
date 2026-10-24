@@ -39,8 +39,8 @@ class RecognitionTest(unittest.TestCase):
         hand_card = next(d for d in result.detections if d.card_id == "2H")
         self.assertFalse(hand_card.is_bottom)
 
-    def test_bottom_reveal_rolls_back_animation_commit(self):
-        """真实截图上模拟翻牌动画：底牌先被当成普通牌入账，落位后必须恢复。"""
+    def test_pre_bottom_detections_are_ignored(self):
+        """真实截图上验证开局门控：三张底牌确认前，所有排除都无效。"""
 
         image = cv2.imread(str(SHOTS / "round_now.png"))
         detections = self.recognizer.recognize(image).detections
@@ -48,13 +48,35 @@ class RecognitionTest(unittest.TestCase):
         self.assertEqual(len(bottom), 3)
 
         tracker = CardTracker(GAME, min_hits=1)
+        # 翻牌动画阶段：底牌还没认全，手牌/动画牌都不入账
         tracker.observe([replace(d, is_bottom=False) for d in bottom])
-        self.assertEqual(tracker.seen_count, 3)
+        self.assertFalse(tracker.armed)
+        self.assertEqual(tracker.seen_count, 0)
 
+        # 第一次看全底牌：只记录，不立即开局
         tracker.observe(detections)
+        self.assertFalse(tracker.armed)
+
+        # 连续两帧稳定确认底牌后才开始记牌，并排除手牌
+        tracker.observe(detections)
+        self.assertTrue(tracker.armed)
         self.assertEqual(tracker.bottom_ids, {d.card_id for d in bottom})
         self.assertEqual(tracker.seen_count, len(detections) - 3)
         self.assertEqual(tracker.remaining, 54 - (len(detections) - 3))
+
+    @unittest.skipUnless((SHOTS / "round_live.png").exists(), "缺少底牌背面样本")
+    def test_face_down_bottom_does_not_start(self):
+        """底牌还是背面时说明地主未决出，任何检测都不能开始记牌。"""
+
+        image = cv2.imread(str(SHOTS / "round_live.png"))
+        detections = self.recognizer.recognize(image).detections
+        self.assertFalse(any(d.is_bottom for d in detections))
+
+        tracker = CardTracker(GAME, min_hits=1)
+        for _ in range(3):
+            tracker.observe(detections)
+        self.assertFalse(tracker.armed)
+        self.assertEqual(tracker.seen_count, 0)
 
     @unittest.skipUnless((SHOTS / "bj_bottom_real.png").exists(), "缺少底牌大王样本")
     def test_bottom_jokers_flagged(self):

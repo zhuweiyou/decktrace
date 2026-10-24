@@ -105,14 +105,16 @@ def render_table(
         cells.append(cell)
     table.add_row(*cells)
 
+    summary = (
+        f"已识别 {snapshot.seen_count}/{game.total_cards}   "
+        f"剩余 {snapshot.remaining} 张"
+        if snapshot.armed
+        else "等待底牌…（识别到三张底牌后开始记牌）"
+    )
     title = Text.assemble(
         (APP_NAME, "bold"),
         "    ",
-        (
-            f"已识别 {snapshot.seen_count}/{game.total_cards}   "
-            f"剩余 {snapshot.remaining} 张",
-            "dim #64748b",
-        ),
+        (summary, "dim #64748b"),
     )
 
     recent_items = list(recent if recent is not None else snapshot.recent)[-8:]

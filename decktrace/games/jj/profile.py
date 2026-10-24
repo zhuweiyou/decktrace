@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ...core.models import WindowSelector
 from ...games.base import (
+    BottomConfig,
     GameProfile,
     JokerBand,
     RecognitionConfig,
@@ -20,6 +21,12 @@ JJ_GAME = GameProfile(
     window=WindowSelector(title="JJ斗地主"),
     templates_dir=TEMPLATES,
     card_assets_dir=Path(__file__).resolve().parent / "assets" / "cards",
+    # 三张底牌固定在顶部偏左；其他游戏可以给不同区域或自定义 BottomSpec。
+    bottom=BottomConfig(
+        region=(0.33, 0.08, 0.47, 0.20),
+        count=3,
+        stable_frames=2,
+    ),
     rank_totals={
         "BJ": 1,
         "SJ": 1,

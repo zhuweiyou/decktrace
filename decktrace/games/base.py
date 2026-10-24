@@ -6,11 +6,47 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Sequence, Tuple
 
-from ..core.models import SUIT_SYMBOLS, WindowSelector
+from ..core.models import SUIT_SYMBOLS, Detection, WindowSelector
+
+
+class BottomSpec(Protocol):
+    """底牌识别策略。
+
+    不同游戏底牌出现的位置、张数、识别方式都不同，甚至可能没有底牌。
+    通用识别引擎只调用 `mark`，通用 runtime 只读取 `count/stable_frames`
+    做开局门控；具体怎么找由游戏 profile 决定。
+    """
+
+    count: int
+    stable_frames: int
+
+    def mark(self, image: Any, detections: Sequence[Detection]) -> List[Detection]:
+        ...
+
+
+@dataclass(frozen=True)
+class BottomConfig:
+    """区域型底牌识别：在归一化矩形内、连续多帧稳定出现才算底牌。"""
+
+    region: Tuple[float, float, float, float]
+    count: int = 3
+    stable_frames: int = 2
+
+    def mark(self, image: Any, detections: Sequence[Detection]) -> List[Detection]:
+        height, width = image.shape[:2]
+        x0, y0, x1, y1 = self.region
+        marked: List[Detection] = []
+        for det in detections:
+            cx = (det.box[0] + det.box[2] / 2) / max(1, width)
+            cy = (det.box[1] + det.box[3] / 2) / max(1, height)
+            if x0 <= cx <= x1 and y0 <= cy <= y1:
+                det = replace(det, is_bottom=True)
+            marked.append(det)
+        return marked
 
 
 @dataclass(frozen=True)
@@ -31,8 +67,6 @@ class RecognitionConfig:
     suit_min_score: float = 0.60
     face_min_fraction: float = 0.25
     rank_margin: float = 0.08
-    # 画面顶部多大比例算“底牌展示区”；该区域的牌可见但未出。
-    bottom_max_ratio: float = 0.25
     joker_template: str = "joker.png"
     joker_compact_template: Optional[str] = "joker_compact.png"
     joker_bands: Tuple[JokerBand, ...] = ()
@@ -60,6 +94,8 @@ class GameProfile:
     rank_totals: Mapping[str, int]
     display_ranks: Tuple[str, ...]
     card_assets_dir: Optional[Path] = None
+    # 底牌识别策略；None 表示该游戏没有“等底牌开局”的概念。
+    bottom: Optional[BottomSpec] = None
     suits: Tuple[str, ...] = ("H", "D", "S", "C")
     labels: Mapping[str, str] = field(default_factory=dict)
     recognition: RecognitionConfig = field(default_factory=RecognitionConfig)

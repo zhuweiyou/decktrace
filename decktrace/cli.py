@@ -270,6 +270,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                 raise CaptureError(f"无法读取截图：{path}")
             result = CardRecognizer(game).recognize(image)
             tracker = CardTracker(game, min_hits=1)
+            # 单帧模式没有后续帧，喂两遍以便确认底牌后开局。
+            tracker.observe(result.detections)
             tracker.observe(result.detections)
             print(render_table(tracker.snapshot(), game, color=color, status="单帧模式"))
             if args.debug:

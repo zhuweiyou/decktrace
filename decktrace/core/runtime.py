@@ -132,6 +132,7 @@ def _write_state(out_dir: Path, snap, batch: Optional[DetectionBatch], status: s
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         payload = {
+            "armed": bool(snap.armed),
             "seen_count": snap.seen_count,
             "remaining": snap.remaining,
             "counts": {k: int(v) for k, v in snap.counts.items()},
