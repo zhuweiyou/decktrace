@@ -31,6 +31,8 @@ class RecognitionConfig:
     suit_min_score: float = 0.60
     face_min_fraction: float = 0.25
     rank_margin: float = 0.08
+    # 画面顶部多大比例算“底牌展示区”；该区域的牌可见但未出。
+    bottom_max_ratio: float = 0.25
     joker_template: str = "joker.png"
     joker_compact_template: Optional[str] = "joker_compact.png"
     joker_bands: Tuple[JokerBand, ...] = ()

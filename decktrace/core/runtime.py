@@ -136,6 +136,7 @@ def _write_state(out_dir: Path, snap, batch: Optional[DetectionBatch], status: s
             "remaining": snap.remaining,
             "counts": {k: int(v) for k, v in snap.counts.items()},
             "seen_ids": sorted(snap.seen_ids),
+            "bottom_ids": sorted(snap.bottom_ids),
             "recent": [d.label for d in snap.recent],
             "detections": (
                 [
@@ -144,6 +145,7 @@ def _write_state(out_dir: Path, snap, batch: Optional[DetectionBatch], status: s
                         "id": d.card_id,
                         "score": round(d.score, 3),
                         "box": [int(v) for v in d.box],
+                        "bottom": bool(d.is_bottom),
                     }
                     for d in batch.detections
                 ]

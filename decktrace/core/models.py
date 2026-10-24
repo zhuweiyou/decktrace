@@ -64,6 +64,8 @@ class Detection:
     suit_score: float = 0.0
     face_score: float = 0.0
     display: str = ""
+    # 底牌栏里的牌：只是可见，不代表已打出，不能计入 seen。
+    is_bottom: bool = False
 
     @property
     def card_id(self) -> str:

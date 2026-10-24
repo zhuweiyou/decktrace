@@ -9,7 +9,7 @@ from ...games.base import GameProfile
 from ..deck import TrackerSnapshot
 from .base import Renderer
 from .cards import CardFaceFactory
-from .highlight import bomb_card_ids
+from .highlight import bomb_card_ids, card_visual_state
 
 
 class QtCardRenderer(Renderer):
@@ -26,7 +26,7 @@ class QtCardRenderer(Renderer):
         self._factory = CardFaceFactory(game)
         self._pixmaps: List[object] = []
         self._cards: List[Tuple[int, object]] = []
-        self._last_ids: Optional[Tuple[str, ...]] = None
+        self._last_key: Optional[Tuple[Tuple[str, ...], frozenset]] = None
         self._size = (0, 0)
         self._placed = False
         self._open = False
@@ -53,12 +53,16 @@ class QtCardRenderer(Renderer):
         if not self._open or self.window is None:
             return
         remaining = game.remaining_card_ids(snapshot.seen_ids)
-        if remaining != self._last_ids:
-            self._last_ids = remaining
-            self._rebuild(remaining)
+        bottom_ids = frozenset(snapshot.bottom_ids)
+        key = (remaining, bottom_ids)
+        if key != self._last_key:
+            self._last_key = key
+            self._rebuild(remaining, bottom_ids)
         self.app.processEvents()
 
-    def _rebuild(self, remaining: Tuple[str, ...]) -> None:
+    def _rebuild(
+        self, remaining: Tuple[str, ...], bottom_ids: frozenset
+    ) -> None:
         from PIL.ImageQt import ImageQt
         from PySide6.QtGui import QPixmap
 
@@ -71,8 +75,13 @@ class QtCardRenderer(Renderer):
         self._cards = []
         bombs = bomb_card_ids(remaining, self.game) if self.highlight_bombs else set()
         for index, card_id in enumerate(remaining):
+            state = card_visual_state(card_id, bottom_ids, bombs)
             pil = self._factory.image(
-                card_id, card_w, card_h, invert=card_id in bombs
+                card_id,
+                card_w,
+                card_h,
+                invert=state == "bomb",
+                bottom=state == "bottom",
             )
             qimg = ImageQt(pil.convert("RGBA"))
             pix = QPixmap.fromImage(qimg)

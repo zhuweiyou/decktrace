@@ -4,10 +4,7 @@ from pathlib import Path
 import cv2
 
 from decktrace.games import get_game
-from decktrace.games import get_game
 from decktrace.recognition import CardRecognizer
-
-GAME = get_game("jj")
 
 GAME = get_game("jj")
 
@@ -33,6 +30,20 @@ class RecognitionTest(unittest.TestCase):
         self.assertEqual(cards, expected)
         # 积分/排名等纯数字不应出现
         self.assertNotIn("750", {d.rank for d in result.detections})
+
+        # 顶部三张底牌只算“可见”，不应当成已出牌
+        bottom = {d.card_id for d in result.detections if d.is_bottom}
+        self.assertEqual(bottom, {"10S", "AH", "8H"})
+        hand_card = next(d for d in result.detections if d.card_id == "2H")
+        self.assertFalse(hand_card.is_bottom)
+
+    @unittest.skipUnless((SHOTS / "bj_bottom_real.png").exists(), "缺少底牌大王样本")
+    def test_bottom_jokers_flagged(self):
+        image = cv2.imread(str(SHOTS / "bj_bottom_real.png"))
+        bottom = {
+            d.card_id for d in self.recognizer.recognize(image).detections if d.is_bottom
+        }
+        self.assertEqual(bottom, {"BJ", "JC", "JH"})
 
     @unittest.skipUnless((SHOTS / "joker_miss.png").exists(), "缺少小王样本")
     def test_compact_small_joker(self):

@@ -14,6 +14,18 @@ def rank_of(card_id: str, game: GameProfile) -> str:
     return card_id[:-1]
 
 
+def card_visual_state(
+    card_id: str, bottom_ids: Iterable[str], bomb_ids: Iterable[str]
+) -> str:
+    """底牌 > 炸弹 > 普通；底牌即使凑成炸弹也保持底牌色。"""
+
+    if card_id in set(bottom_ids):
+        return "bottom"
+    if card_id in set(bomb_ids):
+        return "bomb"
+    return "normal"
+
+
 def bomb_card_ids(remaining: Iterable[str], game: GameProfile) -> Set[str]:
     """剩余牌中某点数 4 张齐全，或双王都在，返回要高亮的牌。"""
 

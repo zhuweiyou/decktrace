@@ -26,6 +26,8 @@ class TrackerSnapshot:
     seen_count: int
     remaining: int
     recent: List[Detection] = field(default_factory=list)
+    # 只在底牌栏出现过、尚未打出的牌；仍计入 remaining。
+    bottom_ids: Set[str] = field(default_factory=set)
 
 
 class CardTracker:
@@ -43,12 +45,14 @@ class CardTracker:
         self.instant_score = instant_score
         self.pending_ttl = pending_ttl
         self.seen_ids: Set[str] = set()
+        self.bottom_ids: Set[str] = set()
         self.seen_by_rank: Counter = Counter()
         self.recent: List[Detection] = []
         self._pending: Dict[str, _Pending] = {}
 
     def reset(self) -> None:
         self.seen_ids.clear()
+        self.bottom_ids.clear()
         self.seen_by_rank.clear()
         self.recent.clear()
         self._pending.clear()
@@ -59,8 +63,17 @@ class CardTracker:
         now = now if now is not None else time.monotonic()
         committed: List[Detection] = []
 
+        # 底牌单独处理：它们只是“可见”，不能进 pending / seen。
+        all_detections = list(detections)
+        for det in all_detections:
+            if det.is_bottom and det.card_id not in self.seen_ids:
+                self.bottom_ids.add(det.card_id)
+
+        # 真正参与出牌判定的只有非底牌检测；同帧按 card_id 去重。
         best_by_id: Dict[str, Detection] = {}
-        for det in detections:
+        for det in all_detections:
+            if det.is_bottom:
+                continue
             current = best_by_id.get(det.card_id)
             if current is None or det.score > current.score:
                 best_by_id[det.card_id] = det
@@ -97,6 +110,8 @@ class CardTracker:
         for det in detections:
             if det.card_id in self.seen_ids:
                 self._pending.pop(det.card_id, None)
+        # 已经打出的牌不再算底牌；GUI 也不会显示它。
+        self.bottom_ids -= self.seen_ids
         return committed
 
     def _commit(self, det: Detection, now: float) -> None:
@@ -129,4 +144,5 @@ class CardTracker:
             seen_count=len(self.seen_ids),
             remaining=self.remaining,
             recent=list(self.recent),
+            bottom_ids=set(self.bottom_ids),
         )

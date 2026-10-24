@@ -43,6 +43,20 @@ def _card_text(det: Detection) -> Text:
     return text
 
 
+def _card_id_text(card_id: str, game: GameProfile) -> Text:
+    """按牌 ID 生成带颜色的文本；底牌行统一用底牌色。"""
+
+    if card_id in game.labels:
+        det = Detection(rank=card_id, suit="", score=0.0, box=(0, 0, 0, 0))
+    else:
+        det = Detection(
+            rank=card_id[:-1], suit=card_id[-1], score=0.0, box=(0, 0, 0, 0)
+        )
+    text = _card_text(det)
+    text.stylize("bold #2563eb")
+    return text
+
+
 def render_table(
     snapshot: TrackerSnapshot,
     game: GameProfile,
@@ -111,8 +125,19 @@ def render_table(
     else:
         recent_line.append("等待识别到牌…", style="dim")
 
+    bottom_ids = [
+        card_id for card_id in game.all_card_ids() if card_id in snapshot.bottom_ids
+    ]
+    bottom_line = Text("底牌（未出，仍计入剩余）：", style="dim")
+
     console.print(title)
     console.print(table)
+    if bottom_ids:
+        for index, card_id in enumerate(bottom_ids):
+            if index:
+                bottom_line.append("  ")
+            bottom_line.append_text(_card_id_text(card_id, game))
+        console.print(bottom_line)
     console.print(recent_line)
     if status:
         console.print(Text(status, style="dim #64748b"))

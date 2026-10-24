@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -327,6 +327,15 @@ class CardRecognizer:
 
         if detect_jokers:
             kept.extend(self._detect_jokers(image, combined, red, dark))
+
+        # 顶部底牌区：牌只是展示给所有人看，尚未打出。
+        bottom_limit = image.shape[0] * self.cfg.bottom_max_ratio
+        kept = [
+            replace(det, is_bottom=True)
+            if (det.box[1] + det.box[3] / 2) < bottom_limit
+            else det
+            for det in kept
+        ]
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         return RecognitionResult(

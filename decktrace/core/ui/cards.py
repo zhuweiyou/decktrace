@@ -10,6 +10,10 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 from ...games.base import GameProfile
 
+# 底牌标记色：介于“正色”和“反色”之间的蓝色调。
+BOTTOM_TINT = (37, 99, 235)
+BOTTOM_TINT_ALPHA = 0.42
+
 FONT_CANDIDATES = (
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
@@ -32,7 +36,7 @@ class CardFaceFactory:
         self.game = game
         self.font_path = _find_font()
         self.asset_dir = game.card_assets_dir
-        self._cache: Dict[Tuple[str, int, int], Image.Image] = {}
+        self._cache: Dict[Tuple[str, int, int, bool, bool], Image.Image] = {}
         self._source_cache: Dict[str, Image.Image] = {}
 
     def _font(self, size: int):
@@ -44,9 +48,15 @@ class CardFaceFactory:
         return ImageFont.load_default()
 
     def image(
-        self, card_id: str, width: int, height: int, *, invert: bool = False
+        self,
+        card_id: str,
+        width: int,
+        height: int,
+        *,
+        invert: bool = False,
+        bottom: bool = False,
     ) -> Image.Image:
-        key = (card_id, width, height, invert)
+        key = (card_id, width, height, invert, bottom)
         if key in self._cache:
             return self._cache[key]
 
@@ -62,12 +72,23 @@ class CardFaceFactory:
 
         if image is None:
             image = self._render(card_id, width, height)
-        if invert:
+        if bottom:
+            image = self._tint(image, BOTTOM_TINT, BOTTOM_TINT_ALPHA)
+        elif invert:
             alpha = image.getchannel("A")
             image = ImageOps.invert(image.convert("RGB")).convert("RGBA")
             image.putalpha(alpha)
         self._cache[key] = image
         return image
+
+    @staticmethod
+    def _tint(image: Image.Image, color: Tuple[int, int, int], alpha: float) -> Image.Image:
+        alpha_channel = image.getchannel("A")
+        overlay = Image.new("RGB", image.size, color)
+        tinted = Image.blend(image.convert("RGB"), overlay, alpha)
+        result = tinted.convert("RGBA")
+        result.putalpha(alpha_channel)
+        return result
 
     def _render(self, card_id: str, width: int, height: int) -> Image.Image:
         image = Image.new("RGBA", (width, height), (0, 0, 0, 0))

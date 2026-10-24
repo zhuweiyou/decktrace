@@ -8,8 +8,14 @@ from decktrace.games import get_game
 GAME = get_game("jj")
 
 
-def det(rank, suit, score=0.95):
-    return Detection(rank=rank, suit=suit, score=score, box=(0, 0, 10, 10))
+def det(rank, suit, score=0.95, bottom=False):
+    return Detection(
+        rank=rank,
+        suit=suit,
+        score=score,
+        box=(0, 0, 10, 10),
+        is_bottom=bottom,
+    )
 
 
 class TrackerTest(unittest.TestCase):
@@ -44,6 +50,36 @@ class TrackerTest(unittest.TestCase):
         tracker.observe([det("7", s) for s in ("H", "D", "S", "C")])
         self.assertEqual(tracker.counts()["7"], 0)
         self.assertEqual(tracker.remaining, 50)
+
+    def test_bottom_cards_not_counted_until_played(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe(
+            [det("10", "S", bottom=True), det("A", "H", bottom=True), det("8", "H", bottom=True)]
+        )
+        self.assertEqual(tracker.seen_count, 0)
+        self.assertEqual(tracker.remaining, 54)
+        self.assertEqual(tracker.counts()["A"], 4)
+        self.assertEqual(tracker.snapshot().bottom_ids, {"10S", "AH", "8H"})
+
+    def test_bottom_card_removed_after_played(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe([det("A", "H", bottom=True)])
+        tracker.observe([det("A", "H")])
+        self.assertEqual(tracker.seen_ids, {"AH"})
+        self.assertEqual(tracker.bottom_ids, set())
+        self.assertEqual(tracker.remaining, 53)
+
+    def test_same_card_bottom_and_hand_commits_as_hand(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe([det("A", "H", bottom=True), det("A", "H")])
+        self.assertEqual(tracker.seen_ids, {"AH"})
+        self.assertEqual(tracker.bottom_ids, set())
+
+    def test_render_marks_bottom(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe([det("A", "H", bottom=True)])
+        text = render_table(tracker.snapshot(), GAME, color=False)
+        self.assertIn("底牌（未出，仍计入剩余）", text)
 
     def test_reset(self):
         tracker = CardTracker(GAME, min_hits=1)
