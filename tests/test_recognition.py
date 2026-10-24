@@ -1,8 +1,10 @@
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 import cv2
 
+from decktrace.core.deck import CardTracker
 from decktrace.games import get_game
 from decktrace.recognition import CardRecognizer
 
@@ -36,6 +38,23 @@ class RecognitionTest(unittest.TestCase):
         self.assertEqual(bottom, {"10S", "AH", "8H"})
         hand_card = next(d for d in result.detections if d.card_id == "2H")
         self.assertFalse(hand_card.is_bottom)
+
+    def test_bottom_reveal_rolls_back_animation_commit(self):
+        """真实截图上模拟翻牌动画：底牌先被当成普通牌入账，落位后必须恢复。"""
+
+        image = cv2.imread(str(SHOTS / "round_now.png"))
+        detections = self.recognizer.recognize(image).detections
+        bottom = [d for d in detections if d.is_bottom]
+        self.assertEqual(len(bottom), 3)
+
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe([replace(d, is_bottom=False) for d in bottom])
+        self.assertEqual(tracker.seen_count, 3)
+
+        tracker.observe(detections)
+        self.assertEqual(tracker.bottom_ids, {d.card_id for d in bottom})
+        self.assertEqual(tracker.seen_count, len(detections) - 3)
+        self.assertEqual(tracker.remaining, 54 - (len(detections) - 3))
 
     @unittest.skipUnless((SHOTS / "bj_bottom_real.png").exists(), "缺少底牌大王样本")
     def test_bottom_jokers_flagged(self):

@@ -61,6 +61,49 @@ class TrackerTest(unittest.TestCase):
         self.assertEqual(tracker.counts()["A"], 4)
         self.assertEqual(tracker.snapshot().bottom_ids, {"10S", "AH", "8H"})
 
+    def test_bottom_confirmation_rolls_back_animation_commit(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        # 翻牌动画：牌先在中间放大出现，被误判成已出
+        tracker.observe([det("5", "H", score=0.90)])
+        self.assertEqual(tracker.seen_ids, {"5H"})
+        # 牌落到顶部底牌位：撤回误入账，回到剩余牌
+        tracker.observe([det("5", "H", score=0.80, bottom=True)])
+        self.assertEqual(tracker.seen_ids, set())
+        self.assertEqual(tracker.bottom_ids, {"5H"})
+        self.assertEqual(tracker.counts()["5"], 4)
+        self.assertEqual(tracker.remaining, 54)
+        self.assertNotIn("5H", {d.card_id for d in tracker.recent})
+        # 底牌栏持续显示，不应反复入账
+        tracker.observe([det("5", "H", score=0.80, bottom=True)])
+        self.assertEqual(tracker.seen_ids, set())
+        # 真正打出后才扣除
+        tracker.observe([det("5", "H")])
+        self.assertEqual(tracker.seen_ids, {"5H"})
+        self.assertEqual(tracker.bottom_ids, set())
+        self.assertEqual(tracker.remaining, 53)
+        # 底牌栏仍然显示这张牌，但不能再次撤回
+        tracker.observe([det("5", "H", score=0.80, bottom=True)])
+        self.assertEqual(tracker.seen_ids, {"5H"})
+        self.assertEqual(tracker.bottom_ids, set())
+
+    def test_bottom_confirmation_rolls_back_two_hit_commit(self):
+        tracker = CardTracker(GAME, min_hits=2, instant_score=0.99)
+        tracker.observe([det("5", "H", score=0.80)])
+        tracker.observe([det("5", "H", score=0.80)])
+        self.assertEqual(tracker.seen_ids, {"5H"})
+        tracker.observe([det("5", "H", score=0.80, bottom=True)])
+        self.assertEqual(tracker.seen_ids, set())
+        self.assertEqual(tracker.bottom_ids, {"5H"})
+        self.assertEqual(tracker.remaining, 54)
+
+    def test_same_frame_animation_and_bottom_keeps_bottom(self):
+        tracker = CardTracker(GAME, min_hits=1)
+        tracker.observe(
+            [det("9", "S", score=0.90), det("9", "S", bottom=True)]
+        )
+        self.assertEqual(tracker.seen_ids, set())
+        self.assertEqual(tracker.bottom_ids, {"9S"})
+
     def test_bottom_card_removed_after_played(self):
         tracker = CardTracker(GAME, min_hits=1)
         tracker.observe([det("A", "H", bottom=True)])
@@ -71,6 +114,11 @@ class TrackerTest(unittest.TestCase):
 
     def test_same_card_bottom_and_hand_commits_as_hand(self):
         tracker = CardTracker(GAME, min_hits=1)
+        # 底牌确认当帧优先按底牌处理，避免动画残影立刻重新入账
+        tracker.observe([det("A", "H", bottom=True), det("A", "H")])
+        self.assertEqual(tracker.seen_ids, set())
+        self.assertEqual(tracker.bottom_ids, {"AH"})
+        # 手牌持续出现，下一帧按手牌扣除
         tracker.observe([det("A", "H", bottom=True), det("A", "H")])
         self.assertEqual(tracker.seen_ids, {"AH"})
         self.assertEqual(tracker.bottom_ids, set())
