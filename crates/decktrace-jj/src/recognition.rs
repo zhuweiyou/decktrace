@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use image::imageops::FilterType;
 use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
@@ -35,6 +35,13 @@ struct Comp {
     area: u32,
 }
 
+#[derive(Default)]
+struct Scratch {
+    red: Vec<u8>,
+    dark: Vec<u8>,
+    combined: Vec<u8>,
+}
+
 pub struct JjRecognizer {
     cfg: RecognitionConfig,
     ranks: BTreeMap<String, GrayImage>,
@@ -42,6 +49,7 @@ pub struct JjRecognizer {
     joker_templates: BTreeMap<String, GrayImage>,
     labels: BTreeMap<String, String>,
     bottom: Option<Arc<dyn BottomSpec>>,
+    scratch: Mutex<Scratch>,
 }
 
 impl JjRecognizer {
@@ -84,6 +92,7 @@ impl JjRecognizer {
             joker_templates,
             labels: game.labels.clone(),
             bottom: game.bottom.clone(),
+            scratch: Mutex::new(Scratch::default()),
         })
     }
 
@@ -91,7 +100,14 @@ impl JjRecognizer {
         let started = std::time::Instant::now();
         let timing = std::env::var("DECKTRACE_TIMING").is_ok();
         let (width, height) = image.dimensions();
-        let (red, dark, combined) = masks(image);
+        let mut scratch = self
+            .scratch
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut red_buf = std::mem::take(&mut scratch.red);
+        let mut dark_buf = std::mem::take(&mut scratch.dark);
+        let mut combined_buf = std::mem::take(&mut scratch.combined);
+        let (red, dark, combined) = masks(image, &mut red_buf, &mut dark_buf, &mut combined_buf);
         let t_masks = started.elapsed();
         let (mut kept, jokers) = rayon::join(
             || self.detect_cards(image, &red, &dark),
@@ -118,6 +134,11 @@ impl JjRecognizer {
             kept
         };
         kept.sort_by_key(|d| (d.bbox.1 / 100, d.bbox.0));
+
+        // 把掩码缓冲还回 scratch，下一帧复用。
+        scratch.red = red.into_raw();
+        scratch.dark = dark.into_raw();
+        scratch.combined = combined.into_raw();
 
         RecognitionResult {
             detections: kept,
@@ -399,14 +420,25 @@ fn load_templates(dir: &Path) -> Result<BTreeMap<String, GrayImage>, Recognition
     Ok(templates)
 }
 
-fn masks(image: &RgbImage) -> (GrayImage, GrayImage, GrayImage) {
+fn masks(
+    image: &RgbImage,
+    red: &mut Vec<u8>,
+    dark: &mut Vec<u8>,
+    combined: &mut Vec<u8>,
+) -> (GrayImage, GrayImage, GrayImage) {
     use rayon::prelude::*;
 
     let (width, height) = image.dimensions();
     let len = (width as usize) * (height as usize);
-    let mut red = vec![0u8; len];
-    let mut dark = vec![0u8; len];
-    let mut combined = vec![0u8; len];
+    if red.len() != len {
+        red.resize(len, 0);
+    }
+    if dark.len() != len {
+        dark.resize(len, 0);
+    }
+    if combined.len() != len {
+        combined.resize(len, 0);
+    }
     red.par_iter_mut()
         .zip(dark.par_iter_mut())
         .zip(combined.par_iter_mut())
@@ -420,9 +452,9 @@ fn masks(image: &RgbImage) -> (GrayImage, GrayImage, GrayImage) {
             *combined_px = (*red_px).max(*dark_px);
         });
     (
-        GrayImage::from_raw(width, height, red).expect("red mask"),
-        GrayImage::from_raw(width, height, dark).expect("dark mask"),
-        GrayImage::from_raw(width, height, combined).expect("combined mask"),
+        GrayImage::from_raw(width, height, std::mem::take(red)).expect("red mask"),
+        GrayImage::from_raw(width, height, std::mem::take(dark)).expect("dark mask"),
+        GrayImage::from_raw(width, height, std::mem::take(combined)).expect("combined mask"),
     )
 }
 

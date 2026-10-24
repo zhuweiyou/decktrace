@@ -15,6 +15,8 @@ use decktrace_tracking::{
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
+mod window_state;
+
 const CARD_W: u32 = 15;
 const CARD_H: u32 = 30;
 const MARGIN: u32 = 4;
@@ -66,15 +68,19 @@ fn main() -> Result<()> {
     let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
     let initial = tracker.snapshot();
     let app = DeckApp::new(game, rx, stop, reset, initial);
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("斗地主记牌器")
+        .with_inner_size([
+            (CARD_W * 54 + MARGIN * 2) as f32,
+            (CARD_H + MARGIN * 2) as f32,
+        ])
+        .with_resizable(false)
+        .with_always_on_top();
+    if let Some(pos) = window_state::load() {
+        viewport = viewport.with_position(pos);
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("斗地主记牌器")
-            .with_inner_size([
-                (CARD_W * 54 + MARGIN * 2) as f32,
-                (CARD_H + MARGIN * 2) as f32,
-            ])
-            .with_resizable(false)
-            .with_always_on_top(),
+        viewport,
         ..Default::default()
     };
     eframe::run_native("斗地主记牌器", options, Box::new(|_cc| Ok(Box::new(app))))
@@ -169,6 +175,7 @@ struct DeckApp {
     textures: HashMap<(String, bool), egui::TextureHandle>,
     badge: Option<egui::TextureHandle>,
     last_key: Option<(Vec<String>, BTreeSet<String>)>,
+    last_pos: Option<egui::Pos2>,
 }
 
 impl DeckApp {
@@ -190,6 +197,7 @@ impl DeckApp {
             textures: HashMap::new(),
             badge: None,
             last_key: None,
+            last_pos: None,
         }
     }
 
@@ -243,6 +251,9 @@ impl eframe::App for DeckApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain();
         let ctx = ui.ctx().clone();
+        if let Some(rect) = ctx.input(|input| input.viewport().outer_rect) {
+            self.last_pos = Some(rect.min);
+        }
         if ctx.input(|input| input.key_pressed(egui::Key::R)) {
             self.reset.store(true, Ordering::Relaxed);
         }
@@ -315,6 +326,9 @@ impl eframe::App for DeckApp {
 impl Drop for DeckApp {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        if let Some(pos) = self.last_pos {
+            window_state::save(pos);
+        }
     }
 }
 

@@ -78,7 +78,7 @@ WindowService → CaptureStream → Session → Recognizer → CardTracker → G
 
 - 某点数 4 张齐全，或大小王都在时，该组牌反色显示。
 - 底牌印章叠加在反色/正色之上，不受影响。
-- GUI 窗口聚焦时按 `R` 重置本局。
+- GUI 窗口聚焦时按 `R` 重置本局；窗口位置会记住。
 
 ## 性能
 
