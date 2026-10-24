@@ -27,6 +27,7 @@ class QtCardRenderer(Renderer):
         self._cards: List[Tuple[int, object]] = []
         self._last_ids: Optional[Tuple[str, ...]] = None
         self._size = (0, 0)
+        self._placed = False
         self._open = False
 
     def start(self) -> None:
@@ -65,7 +66,6 @@ class QtCardRenderer(Renderer):
         margin = 4
         width = card_w * 54 + margin * 2
         height = card_h + margin * 2
-        self._size = (width, height)
         self._pixmaps = []
         self._cards = []
         bombs = bomb_card_ids(remaining, self.game) if self.highlight_bombs else set()
@@ -77,11 +77,16 @@ class QtCardRenderer(Renderer):
             pix = QPixmap.fromImage(qimg)
             self._pixmaps.append(pix)
             self._cards.append((margin + index * card_w, pix))
-        self.window.resize(width, height)
+        if self._size != (width, height):
+            self._size = (width, height)
+            self.window.resize(width, height)
         self._place()
         self.window.update()
 
     def _place(self) -> None:
+        # 只定位一次；用户拖动后不要每次牌数变化又拉回中间
+        if self._placed:
+            return
         from PySide6.QtGui import QGuiApplication
 
         screen = QGuiApplication.primaryScreen().availableGeometry()
@@ -89,6 +94,7 @@ class QtCardRenderer(Renderer):
         x = screen.x() + max(0, (screen.width() - width) // 2)
         y = screen.y() + 40
         self.window.move(x, y)
+        self._placed = True
 
     def close(self) -> None:
         if self.window is not None:
