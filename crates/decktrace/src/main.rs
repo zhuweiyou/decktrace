@@ -331,17 +331,6 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
     card_id[..card_id.len() - 1].to_string()
 }
 
-#[cfg(target_os = "macos")]
 fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(Box::new(decktrace_capture_macos::MacPlatform::new()?))
-}
-
-#[cfg(target_os = "windows")]
-fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(Box::new(decktrace_capture_windows::WindowsPlatform::new()?))
-}
-
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-fn create_platform() -> Result<Box<dyn Platform>> {
-    Err(anyhow::anyhow!("当前只实现了 macOS/Windows 采集后端"))
+    Ok(decktrace_capture::create_platform()?)
 }

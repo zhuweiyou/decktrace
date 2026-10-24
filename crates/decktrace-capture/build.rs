@@ -2,6 +2,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
+        return;
+    }
     // screencapturekit/apple-cf 的 Swift 桥接需要 Swift 运行时兼容库。
     // Command Line Tools 下 xcrun 找到的 swiftc 路径与链接器默认搜索路径不一定一致，
     // 这里显式把工具链的 Swift 库目录加进 link search。

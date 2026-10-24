@@ -1,5 +1,5 @@
 [package]
-name = "decktrace-capture-macos"
+name = "decktrace-capture"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,3 +14,5 @@ thiserror.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 screencapturekit = { workspace = true, features = ["macos_14_0"] }
+
+# Windows 实现目前是占位；接 WGC 时在这里加 windows crate。

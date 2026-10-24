@@ -24,8 +24,7 @@
 crates/
   decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer/CaptureStream 抽象、CardTracker
   decktrace-game-jj/          # JJ 实现：profile、templates、cards、recognition
-  decktrace-capture-macos/    # ScreenCaptureKit 实现
-  decktrace-capture-windows/  # Windows 采集占位
+  decktrace-capture/          # 平台实现：macOS cfg / Windows cfg（Windows 占位）
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
@@ -95,7 +94,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
 - `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
   - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
-  - `crates/decktrace-capture-macos/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
+  - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
 - 打包脚本会拷贝 `crates/decktrace-game-jj/assets` 到 `Contents/Resources/assets/jj`。
