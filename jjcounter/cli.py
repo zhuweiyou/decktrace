@@ -267,6 +267,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         color=color,
         out_dir=Path(args.out_dir),
         capture_format=args.capture_format,
+        capture_backend=args.capture_backend,
+        sck_fps=args.sck_fps,
+        sck_quality=args.sck_quality,
     )
 
 
@@ -322,7 +325,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--capture-format",
         choices=("jpg", "png"),
         default="jpg",
-        help="截图格式，默认 jpg（更快）；需要无损调试时用 png",
+        help="legacy 截图格式，默认 jpg（更快）；需要无损调试时用 png",
+    )
+    run_parser.add_argument(
+        "--capture-backend",
+        choices=("sck", "legacy"),
+        default="sck",
+        help="sck=常驻 ScreenCaptureKit（默认），legacy=每帧 screencapture",
+    )
+    run_parser.add_argument("--sck-fps", type=float, default=15.0, help="常驻采集帧率，默认 15")
+    run_parser.add_argument(
+        "--sck-quality", type=float, default=0.88, help="常驻采集 JPEG 质量，默认 0.88"
     )
     run_parser.add_argument("--min-hits", type=int, default=2, help="同一张牌至少出现几帧才入账，默认 2")
     run_parser.add_argument("--no-auto-reset", action="store_true", help="关闭新一局自动重置")

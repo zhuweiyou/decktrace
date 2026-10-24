@@ -326,7 +326,9 @@ class CardRecognizer:
 
     # ---------- 对外接口 ----------
 
-    def recognize(self, image: np.ndarray) -> RecognitionResult:
+    def recognize(
+        self, image: np.ndarray, *, detect_jokers: bool = True
+    ) -> RecognitionResult:
         import time
 
         started = time.perf_counter()
@@ -389,7 +391,8 @@ class CardRecognizer:
                 continue
             kept.append(det)
 
-        kept.extend(self._detect_jokers(image, combined, red, dark))
+        if detect_jokers:
+            kept.extend(self._detect_jokers(image, combined, red, dark))
 
         elapsed_ms = (time.perf_counter() - started) * 1000
         return RecognitionResult(

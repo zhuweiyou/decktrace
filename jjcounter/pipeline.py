@@ -35,7 +35,8 @@ from .recognition import (
     RecognitionResult,
     annotate,
 )
-from .window import WindowError
+from .sck import SCKCapture, SCKError, RawFrame, save_jpeg_atomic
+from .window import WindowError, WindowInfo, find_window
 
 
 @dataclass
@@ -254,6 +255,102 @@ class CaptureProducer(threading.Thread):
         return self.seq / elapsed
 
 
+class SCKCaptureProducer(threading.Thread):
+    """消费常驻 ScreenCaptureKit helper 的二进制帧流。"""
+
+    def __init__(
+        self,
+        sck: SCKCapture,
+        window: WindowInfo,
+        out_queue: "queue.Queue[FramePacket]",
+        stop_event: threading.Event,
+        state: SharedState,
+        latest_path: Path,
+    ) -> None:
+        super().__init__(name="capture-sck", daemon=True)
+        self.sck = sck
+        self.window = window
+        self.queue = out_queue
+        self.stop_event = stop_event
+        self.state = state
+        self.latest_path = latest_path
+        self.seq = 0
+        self.started_at = time.monotonic()
+        self._last_save = 0.0
+        self._last_error_print = 0.0
+
+    def _handle(self, raw: RawFrame) -> None:
+        started = time.perf_counter()
+        image = cv2.imdecode(
+            np.frombuffer(raw.jpeg, dtype=np.uint8), cv2.IMREAD_COLOR
+        )
+        elapsed = time.perf_counter() - started
+        if image is None:
+            raise SCKError("无法解码 ScreenCaptureKit JPEG 帧")
+
+        h, w = image.shape[:2]
+        captured_at = datetime.fromtimestamp(raw.timestamp).astimezone()
+        frame = Frame(
+            path=self.latest_path,
+            captured_at=captured_at,
+            window=self.window,
+            width=w,
+            height=h,
+            scale=w / self.window.width if self.window.width else 1.0,
+            elapsed=elapsed,
+        )
+        self.seq += 1
+        packet = FramePacket(
+            seq=self.seq,
+            frame=frame,
+            image=image,
+            enqueued_at=time.monotonic(),
+        )
+        while True:
+            try:
+                self.queue.put_nowait(packet)
+                break
+            except queue.Full:
+                try:
+                    self.queue.get_nowait()
+                    with self.state.lock:
+                        self.state.dropped += 1
+                except queue.Empty:
+                    pass
+
+        now = time.monotonic()
+        if now - self._last_save >= 0.5:
+            try:
+                save_jpeg_atomic(self.latest_path, raw.jpeg)
+            except OSError:
+                pass
+            self._last_save = now
+
+    def run(self) -> None:
+        raw = self.sck.take_first()
+        while not self.stop_event.is_set():
+            try:
+                if raw is None:
+                    raw = self.sck.read(timeout=2.0)
+                self._handle(raw)
+                raw = None
+            except (SCKError, OSError) as exc:
+                with self.state.lock:
+                    self.state.errors += 1
+                now = time.monotonic()
+                if now - self._last_error_print >= 3.0:
+                    print(f"\n[SCK采集] {exc}", file=sys.stderr)
+                    self._last_error_print = now
+                # 采集断了就不要继续显示旧牌表，让主循环退出并提示重启
+                self.stop_event.set()
+                break
+
+    @property
+    def fps(self) -> float:
+        elapsed = max(time.monotonic() - self.started_at, 1e-6)
+        return self.seq / elapsed
+
+
 class RecognitionWorker(threading.Thread):
     def __init__(
         self,
@@ -269,6 +366,8 @@ class RecognitionWorker(threading.Thread):
         self.stop_event = stop_event
         self.state = state
         self.debug_dir = debug_dir
+        self._frame_no = 0
+        self._last_debug_save = 0.0
         self._debug_tmp = debug_dir / "annotated.tmp.png" if debug_dir else None
         self._debug_out = debug_dir / "annotated.png" if debug_dir else None
         if debug_dir:
@@ -281,12 +380,31 @@ class RecognitionWorker(threading.Thread):
             except queue.Empty:
                 continue
             try:
-                result = self.recognizer.recognize(packet.image)
+                with self.state.lock:
+                    both_jokers_seen = (
+                        "BJ" in self.state.tracker.seen_ids
+                        and "SJ" in self.state.tracker.seen_ids
+                    )
+                # 王一旦都确认过就不用再找；未确认时每 2 帧找一次。
+                # 牌会停留数秒，不需要每帧都跑 60ms 的王模板。
+                detect_jokers = (
+                    not both_jokers_seen and self._frame_no % 2 == 0
+                )
+                self._frame_no += 1
+                result = self.recognizer.recognize(
+                    packet.image, detect_jokers=detect_jokers
+                )
                 self.state.ingest(packet, result, make_annotated=self.debug_dir is not None)
-                if self._debug_out and self.state.last_annotated is not None:
+                now = time.monotonic()
+                if (
+                    self._debug_out
+                    and self.state.last_annotated is not None
+                    and now - self._last_debug_save >= 0.5
+                ):
                     assert self._debug_tmp is not None
                     cv2.imwrite(str(self._debug_tmp), self.state.last_annotated)
                     os.replace(self._debug_tmp, self._debug_out)
+                    self._last_debug_save = now
             except Exception as exc:
                 with self.state.lock:
                     self.state.errors += 1
@@ -384,18 +502,12 @@ def run_counter(
     color: bool,
     out_dir: Path,
     capture_format: str = "jpg",
+    capture_backend: str = "sck",
+    sck_fps: float = 15.0,
+    sck_quality: float = 0.88,
 ) -> int:
-    capture = WindowCapture(
-        title=title,
-        owner=owner,
-        window_id=window_id,
-        interval=interval,
-        fmt=capture_format,
-        output_dir=out_dir,
-        max_consecutive_errors=20,
-    )
     try:
-        window = capture.resolve_window()
+        window = find_window(title=title, owner=owner, window_id=window_id)
     except WindowError as exc:
         print(f"找不到窗口：{exc}", file=sys.stderr)
         return 2
@@ -407,6 +519,15 @@ def run_counter(
         return 2
 
     if once:
+        capture = WindowCapture(
+            title=title,
+            owner=owner,
+            window_id=window.id,
+            interval=interval,
+            fmt=capture_format,
+            output_dir=out_dir,
+            max_consecutive_errors=20,
+        )
         try:
             frame = capture.capture()
             image = cv2.imread(str(frame.path), cv2.IMREAD_COLOR)
@@ -427,9 +548,47 @@ def run_counter(
             return 1
 
     state = SharedState(tracker=CardTracker(min_hits=min_hits), auto_reset=auto_reset)
-    packet_queue: "queue.Queue[FramePacket]" = queue.Queue(maxsize=30)
+    packet_queue: "queue.Queue[FramePacket]" = queue.Queue(
+        maxsize=3 if capture_backend == "sck" else 30
+    )
     stop_event = threading.Event()
-    producer = CaptureProducer(capture, packet_queue, stop_event, state, interval)
+    sck: Optional[SCKCapture] = None
+    backend = capture_backend
+
+    if backend == "sck":
+        try:
+            sck = SCKCapture(window, fps=sck_fps, quality=sck_quality)
+            sck.start()
+            producer = SCKCaptureProducer(
+                sck,
+                window,
+                packet_queue,
+                stop_event,
+                state,
+                latest_path=out_dir / "latest.jpg",
+            )
+        except Exception as exc:
+            print(
+                f"ScreenCaptureKit 启动失败，回退 screencapture：{exc}",
+                file=sys.stderr,
+            )
+            sck = None
+            backend = "legacy"
+
+    if backend == "legacy":
+        capture = WindowCapture(
+            title=title,
+            owner=owner,
+            window_id=window.id,
+            interval=interval,
+            fmt=capture_format,
+            output_dir=out_dir,
+            max_consecutive_errors=20,
+        )
+        producer = CaptureProducer(
+            capture, packet_queue, stop_event, state, interval
+        )
+
     worker = RecognitionWorker(
         recognizer,
         packet_queue,
@@ -438,10 +597,15 @@ def run_counter(
         debug_dir=(out_dir if debug else None),
     )
 
+    backend_desc = (
+        f"ScreenCaptureKit {sck_fps:g}fps"
+        if backend == "sck"
+        else f"screencapture {interval:g}s"
+    )
     print(f"目标窗口：{window}")
     print(
-        f"输出目录：{out_dir.resolve()}   "
-        f"采集间隔：{interval:g}s   自动重置：{'开' if auto_reset else '关'}"
+        f"采集后端：{backend_desc}   输出目录：{out_dir.resolve()}   "
+        f"自动重置：{'开' if auto_reset else '关'}"
     )
     print("按 r 重置本局，Ctrl+C 退出。")
     time.sleep(0.8)
@@ -461,7 +625,7 @@ def run_counter(
         while not stop_event.is_set():
             if duration is not None and time.monotonic() - started >= duration:
                 break
-            time.sleep(0.25)
+            time.sleep(0.12)
             snap, result, last_frame, recognition_ms, frames, errors, dropped, resets = (
                 state.snapshot()
             )
@@ -478,6 +642,8 @@ def run_counter(
         worker.join(timeout=3.0)
         if "input_thread" in locals():
             input_thread.join(timeout=1.0)
+        if sck is not None:
+            sck.stop()
         sys.stdout.write(show_cursor() + "\n")
         snap, result, last_frame, recognition_ms, frames, errors, dropped, resets = (
             state.snapshot()

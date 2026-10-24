@@ -255,17 +255,22 @@ card_id = rank + suit
 已采用结构：
 
 ```text
-CaptureProducer ──截图 + imread──> Queue(maxsize=N) ──> RecognitionWorker ──> SharedState
-                                                          │
-                                                          └──> 终端表格 / state.json
+sckcap(Swift, 常驻) ──二进制 JPEG 帧(stdout)──> SCKCaptureProducer
+                                                   │
+                                                   ▼
+                                       Queue(maxsize=3) ──> RecognitionWorker
+                                                                │
+                                                                └──> 终端表格 / state.json
 ```
 
 原则：
 
-- 截图线程绝不做识别。
-- 识别线程消费 numpy 图像，不依赖会被覆盖的 `latest.png`。
-- 队列满时丢最旧帧，不能阻塞采集。
-- `latest.png` 用临时文件 + `os.replace` 原子替换。
+- 默认不再每帧启动 `screencapture`，而是启动一次 ScreenCaptureKit helper。
+- helper 通过 stdout 发送 `SCK1 + seq + ts + w + h + size + JPEG`，Python 直接解码，不经过磁盘。
+- 识别线程消费 numpy 图像，不依赖会被覆盖的 `latest.jpg`。
+- 队列要小（3 帧左右）；识别跟不上时丢最旧帧，保持低延迟。
+- 只有调试/兼容才走 legacy `screencapture`（`--capture-backend legacy`）。
+- `latest.jpg` 只是调试产物，约每 0.5s 原子写一次，不参与识别主链路。
 - 共享状态用锁；终端只读快照。
 - 退出时：
 
@@ -292,8 +297,10 @@ CaptureProducer ──截图 + imread──> Queue(maxsize=N) ──> Recognitio
 - Retina 截图是逻辑尺寸的 2x；用 `image_width / window.width` 计算 scale。
 - 窗口最小化无法截图；被其他窗口遮挡通常能截到内容，但完全遮挡时系统可能降低刷新率。
 - 屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统音频录制；授权后重启终端应用。
-- PNG 单帧约 140ms，JPEG 单帧约 95ms、解码约 5ms。实时模式默认 JPEG + 0.15s 间隔，实测约 5.7fps；`--interval 0.1` 约 7.7fps。
-- 若要稳定超过 8–10fps，瓶颈在 `screencapture` 每次启动进程，而不是 Python；届时应改用常驻 ScreenCaptureKit/Swift 采集，而不是重写 Python 识别。
+- legacy PNG 单帧约 140ms，JPEG 单帧约 95ms、解码约 5ms。
+- 默认常驻 ScreenCaptureKit helper：15fps 配置实测约 13.6fps；JPEG 解码约 4.5ms，采集不再有每帧进程启动成本。
+- 识别端未确认双王时大小王隔帧检测（约 95ms/帧），双王确认后约 15ms/帧；队列 3，延迟约 0.1–0.3s。
+- 如果要继续提速，先看识别单帧耗时和队列；不要再回到“每帧 screencapture”的方案。
 
 ---
 
@@ -369,7 +376,9 @@ open frames/annotated.png
 | JSON 崩溃 | numpy int64 不可序列化 | 写 JSON 前转 int |
 | 退出后终端不回显 | cbreak 输入线程未 join | 退出时 join 并恢复 termios |
 | 识别越来越慢 | 全图多尺度模板搜索 | 锚点 + 高度带/小 ROI + 限制尺度 |
-| 2fps 上不去 | 大小王全图 8 尺度匹配 + PNG 截图 | 分带 3–4 尺度、JPEG、0.15s 间隔 |
+| 2fps 上不去 | 大小王全图 8 尺度匹配 + 每帧启动 screencapture | 分带 3–4 尺度 + 常驻 ScreenCaptureKit 二进制流 |
+| 文件读写延迟 | 每帧写 latest 再读 | 常驻进程 stdout 二进制帧，Python 直接解码 |
+| 队列延迟 1s | 队列 12 且识别 10fps | SCK 队列降到 3，丢旧帧保最新 |
 
 ---
 
