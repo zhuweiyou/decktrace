@@ -1,0 +1,28 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 虚拟环境与编译产物
+.venv/
+.build/
+dist/
+build/
+
+# 编辑器与系统文件
+.DS_Store
+.idea/
+.vscode/
+
+# 运行时截图、标注图与状态文件
+frames/*
+!frames/.gitkeep
+shots/*
+!shots/.gitkeep
+
+# 日志
+*.log

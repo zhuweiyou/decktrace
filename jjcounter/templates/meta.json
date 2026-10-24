@@ -1,0 +1,26 @@
+{
+  "ref_suit_height": 45.0,
+  "rank_template_height": 70,
+  "joker_scale_reference": 1.0,
+  "ranks": [
+    "10",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "A",
+    "J",
+    "K",
+    "Q"
+  ],
+  "suits": [
+    "C",
+    "D",
+    "H",
+    "S"
+  ]
+}
