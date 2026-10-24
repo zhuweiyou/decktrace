@@ -1,8 +1,8 @@
-//! 平台与采集抽象。具体实现由 capture-* crate 提供。
+//! 平台与采集抽象。
 
 use std::time::Duration;
 
-use crate::{RawFrame, WindowInfo, WindowSelector};
+use decktrace_core::{RawFrame, WindowInfo, WindowSelector};
 
 use thiserror::Error;
 

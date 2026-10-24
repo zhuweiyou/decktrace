@@ -32,9 +32,9 @@ cargo run --release -p decktrace
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer/CaptureStream 抽象、CardTracker
+  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer 抽象、CardTracker
   decktrace-game-jj/          # JJ 实现：窗口、牌堆、模板、牌面素材、识别引擎
-  decktrace-capture/          # 平台实现：macOS cfg / Windows cfg（Windows 占位）
+  decktrace-capture/          # 采集 trait + macOS/Windows 实现（cfg，Windows 占位）
   decktrace/                  # GUI + Session + 游戏注册表（唯一发布产物）
 scripts/
   bundle-macos.sh             # 生成 dist/decktrace.app
@@ -43,13 +43,13 @@ scripts/
 数据流：
 
 ```text
-WindowService → CaptureStream → Session → CardRecognizer → CardTracker → GUI
+WindowService → CaptureStream → Session → Recognizer → CardTracker → GUI
 ```
 
-- `GameProfile` / `BottomSpec` / `Recognizer` / `CaptureStream` 抽象在 `decktrace-core`。
-- 平台实现按 `cfg(target_os)` 收在 `decktrace-capture`，不会为另一个平台编译依赖。
+- `GameProfile` / `BottomSpec` / `Recognizer` 抽象在 `decktrace-core`。
+- 采集 trait 与平台实现内聚在 `decktrace-capture`：trait 供 Session 使用，macOS/Windows 按 `cfg(target_os)` 编译。
 - 模板识别实现属于 JJ：`decktrace-game-jj/src/recognition.rs`。
-- `Session` 只依赖 core 的 `Recognizer` 和 `CaptureStream`；`decktrace` 负责把 JJ 实现注入进去。
+- `Session` 只依赖 core 的 `Recognizer` 与 capture 的 `CaptureStream/Platform`；`decktrace` 负责把 JJ 和平台实现注入进去。
 - 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
 
 ## 识别规则

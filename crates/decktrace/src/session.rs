@@ -7,9 +7,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use decktrace_capture::{CaptureStream, Platform};
 use decktrace_core::{
-    CaptureStream, CardTracker, Detection, GameProfile, Platform, SharedRecognizer,
-    TrackerSnapshot, WindowInfo,
+    CardTracker, Detection, GameProfile, SharedRecognizer, TrackerSnapshot, WindowInfo,
 };
 
 pub struct Tick {

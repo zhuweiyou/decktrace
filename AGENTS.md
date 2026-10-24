@@ -22,9 +22,9 @@
 
 ```text
 crates/
-  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer/CaptureStream 抽象、CardTracker
+  decktrace-core/             # 模型、GameProfile/BottomSpec、Recognizer 抽象、CardTracker
   decktrace-game-jj/          # JJ 实现：profile、templates、cards、recognition
-  decktrace-capture/          # 平台实现：macOS cfg / Windows cfg（Windows 占位）
+  decktrace-capture/          # 采集 trait + macOS/Windows 实现（cfg，Windows 占位）
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
@@ -33,7 +33,8 @@ start-gui.sh                  # 打包并启动
 规则：
 
 - 每个游戏一个独立 crate：`decktrace-game-xxx`。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
-- 通用层只依赖 `decktrace-core` 里的 `GameProfile` / `BottomSpec` / `Recognizer` / `CaptureStream` 抽象。
+- 通用层只依赖 `decktrace-core` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `decktrace-capture` 的采集 trait。
+- capture 的抽象和实现内聚在 `decktrace-capture`，平台差异只用 `cfg` 和 target-specific dependencies。
 - 模板识别是 JJ 专属实现，放在 `decktrace-game-jj/src/recognition.rs`，不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 
