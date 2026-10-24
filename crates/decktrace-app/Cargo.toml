@@ -1,0 +1,18 @@
+[package]
+name = "decktrace-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+decktrace-core = { path = "../decktrace-core" }
+decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-capture = { path = "../decktrace-capture" }
+decktrace-recognition = { path = "../decktrace-recognition" }
+decktrace-ui = { path = "../decktrace-ui" }
+crossterm.workspace = true
+image.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true

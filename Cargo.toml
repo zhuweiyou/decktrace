@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/decktrace-core",
+    "crates/decktrace-game-api",
+    "crates/decktrace-game-jj",
+    "crates/decktrace-games",
+    "crates/decktrace-recognition",
+    "crates/decktrace-capture",
+    "crates/decktrace-capture-macos",
+    "crates/decktrace-ui",
+    "crates/decktrace-ui-tui",
+    "crates/decktrace-app",
+    "crates/decktrace-cli",
+    "apps/decktrace-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.88"
+
+[workspace.dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "rayon"] }
+imageproc = { version = "0.27", default-features = false, features = ["rayon"] }
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4.6", features = ["derive"] }
+crossbeam-channel = "0.5"
+screencapturekit = "11.1"
+ratatui = "0.30"
+crossterm = "0.29"
+eframe = "0.37"

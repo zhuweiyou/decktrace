@@ -450,7 +450,25 @@ TUI/e2e 验收（显式指定，不改变默认 UI）：
 
 ---
 
-## 12. 完成标准
+## 12. Rust 重写（rust-rewrite 分支）
+
+- 新代码在 Cargo workspace：`crates/` + `apps/decktrace-gui`，Python 版保留作识别 oracle。
+- 游戏必须独立成 crate：`decktrace-game-jj` 只是 JJ；新增游戏新建
+  `decktrace-game-xxx`，在 `decktrace-games` 注册表加一行。不要把具体游戏塞进通用 crate。
+- 通用层不写死底牌区域/张数：底牌识别通过 `GameProfile.bottom`（`BottomSpec`）注入。
+- TUI 和 GUI 都是独立入口，**CLI 不再有 `--ui gui`**；GUI 是 `apps/decktrace-gui` 可启动应用。
+- 必跑：`cargo test --release --workspace`；识别回归依赖 `shots/`，样本缺失时跳过。
+- 实时/性能验证必须用 release；debug 下识别会慢约一个数量级。
+- macOS 采集已纯 Rust 化（ScreenCaptureKit），没有 Swift helper。
+  `.cargo/config.toml` 的 Swift runtime rpath 和 `capture-macos/build.rs` 的 link search 不要删，
+  否则 dyld 会找不到 `libswift_Concurrency.dylib`。
+- 大小王匹配是“1/4 粗搜索 + 全分辨率局部 CCOEFF_NORMED”；改阈值时先用
+  `DECKTRACE_TIMING=1` 看 masks/cards/jokers 分段耗时，再跑全部 golden 截图。
+- 当前已知差距：Rust release 单帧约 40–50ms（Python 约 15–25ms），Windows 后端未实现。
+
+---
+
+## 13. 完成标准
 
 一个改动只有同时满足以下条件才算完成：
 

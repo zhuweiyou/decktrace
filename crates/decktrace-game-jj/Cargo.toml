@@ -1,0 +1,10 @@
+[package]
+name = "decktrace-game-jj"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+decktrace-core = { path = "../decktrace-core" }
+decktrace-game-api = { path = "../decktrace-game-api" }

@@ -9,6 +9,7 @@ htmlcov/
 
 # 虚拟环境与编译产物
 .venv/
+target/
 .build/
 dist/
 build/

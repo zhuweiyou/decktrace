@@ -1,0 +1,13 @@
+[package]
+name = "decktrace-ui-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+decktrace-core = { path = "../decktrace-core" }
+decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-ui = { path = "../decktrace-ui" }
+crossterm.workspace = true
+unicode-width = "0.2"

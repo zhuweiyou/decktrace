@@ -1,0 +1,25 @@
+[package]
+name = "decktrace-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "decktrace"
+path = "src/main.rs"
+
+[dependencies]
+decktrace-app = { path = "../decktrace-app" }
+decktrace-capture = { path = "../decktrace-capture" }
+decktrace-core = { path = "../decktrace-core" }
+decktrace-game-api = { path = "../decktrace-game-api" }
+decktrace-games = { path = "../decktrace-games" }
+decktrace-ui = { path = "../decktrace-ui" }
+decktrace-ui-tui = { path = "../decktrace-ui-tui" }
+clap.workspace = true
+anyhow.workspace = true
+image.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+decktrace-capture-macos = { path = "../decktrace-capture-macos" }

@@ -1,0 +1,7 @@
+# screencapturekit 的 Swift 桥接依赖系统 Swift 运行时（位于 dyld 缓存）。
+# 给最终二进制补上 rpath，避免 GUI/CLI 运行时找不到 libswift_Concurrency。
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-rpath,/usr/lib/swift"]
