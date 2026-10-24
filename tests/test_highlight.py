@@ -1,7 +1,7 @@
 import unittest
 
-from jjcounter.core.ui.highlight import bomb_card_ids
-from jjcounter.games import get_game
+from decktrace.core.ui.highlight import bomb_card_ids
+from decktrace.games import get_game
 
 GAME = get_game("jj")
 

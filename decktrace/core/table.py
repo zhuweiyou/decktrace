@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
+from .. import APP_NAME
 from ..games.base import GameProfile
 from .deck import TrackerSnapshot
 from .models import Detection
@@ -91,7 +92,7 @@ def render_table(
     table.add_row(*cells)
 
     title = Text.assemble(
-        (f"{game.name} · 记牌器", "bold"),
+        (APP_NAME, "bold"),
         "    ",
         (
             f"已识别 {snapshot.seen_count}/{game.total_cards}   "

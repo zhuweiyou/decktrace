@@ -1,9 +1,9 @@
 import unittest
 from pathlib import Path
 
-from jjcounter.core.models import WindowInfo, WindowSelector
-from jjcounter.games import get_game, list_games
-from jjcounter.platforms.base import WindowService, WindowError
+from decktrace.core.models import WindowInfo, WindowSelector
+from decktrace.games import get_game, list_games
+from decktrace.platforms.base import WindowService, WindowError
 
 
 class FakeWindowService(WindowService):
@@ -20,20 +20,20 @@ class FakeSelectorTest(unittest.TestCase):
     def setUp(self):
         self.service = FakeWindowService(
             [
-                WindowInfo(1, "JJ斗地主", "微信", width=900, height=550),
-                WindowInfo(2, "JJ斗地主", "WeChat", width=1280, height=720),
+                WindowInfo(1, "斗地主", "微信", width=900, height=550),
+                WindowInfo(2, "斗地主", "WeChat", width=1280, height=720),
                 WindowInfo(3, "别的窗口", "微信", width=900, height=550),
             ]
         )
 
     def test_title_and_app_selection(self):
         window = self.service.find_window(
-            WindowSelector(title="JJ斗地主", app="微信")
+            WindowSelector(title="斗地主", app="微信")
         )
         self.assertEqual(window.id, 1)
 
     def test_exact_title_falls_back_to_any_app(self):
-        window = self.service.find_window(WindowSelector(title="JJ斗地主"))
+        window = self.service.find_window(WindowSelector(title="斗地主"))
         self.assertIn(window.id, (1, 2))
 
     def test_id_priority(self):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+from ... import APP_NAME
 from ...games.base import GameProfile
 from ..deck import TrackerSnapshot
 from .base import Renderer
@@ -41,7 +42,7 @@ class QtCardRenderer(Renderer):
             self.window.setWindowFlags(
                 self.window.windowFlags() | Qt.WindowStaysOnTopHint
             )
-        self.window.setWindowTitle(f"{self.game.name} · 剩余牌")
+        self.window.setWindowTitle(APP_NAME)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()

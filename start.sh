@@ -15,4 +15,4 @@ elif [ "${1#-}" != "$1" ]; then
   set -- run "$@"
 fi
 
-exec "$PY" -m jjcounter "$@"
+exec "$PY" -m decktrace "$@"

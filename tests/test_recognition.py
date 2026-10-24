@@ -3,9 +3,9 @@ from pathlib import Path
 
 import cv2
 
-from jjcounter.games import get_game
-from jjcounter.games import get_game
-from jjcounter.recognition import CardRecognizer
+from decktrace.games import get_game
+from decktrace.games import get_game
+from decktrace.recognition import CardRecognizer
 
 GAME = get_game("jj")
 

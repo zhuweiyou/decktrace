@@ -1,9 +1,9 @@
 import unittest
 
-from jjcounter.core.deck import CardTracker
-from jjcounter.core.models import Detection
-from jjcounter.core.table import render_table
-from jjcounter.games import get_game
+from decktrace.core.deck import CardTracker
+from decktrace.core.models import Detection
+from decktrace.core.table import render_table
+from decktrace.games import get_game
 
 GAME = get_game("jj")
 
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 class AutoResetTest(unittest.TestCase):
     def setUp(self):
         import numpy as np
-        from jjcounter.core.runtime import SharedState
+        from decktrace.core.runtime import SharedState
 
         self.state = SharedState(
             game=GAME, tracker=CardTracker(GAME, min_hits=1), auto_reset=True

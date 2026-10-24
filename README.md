@@ -1,6 +1,9 @@
-# 跨平台斗地主图像识别记牌器
+# 斗地主记牌器（decktrace）
 
 通过窗口采集识别牌面，自动扣除自己的手牌、底牌和所有人出过的牌，在 TUI 或置顶 GUI 中展示剩余牌。
+
+平台、游戏、识别来源、UI 都是可替换的；当前默认实现面向微信小程序《JJ斗地主》
+（`games/jj`），其他斗地主游戏通过新增 `GameProfile` 接入，业务层无需改动。
 
 当前 **macOS 完整可用**；Windows 已完成窗口枚举与架构预留，截图/采集后端待实现。
 
@@ -33,6 +36,8 @@ Core（业务，完全复用）
 
 ### UI 抽象
 
+默认 UI 是 GUI；TUI 仅在调试/e2e 时通过 `--ui tui` 使用。
+
 `core/ui/` 只依赖 `TrackerSnapshot + GameProfile`：
 
 - `TuiRenderer`：Rich 表格，保留帧率、队列、识别耗时等调试信息。
@@ -42,12 +47,12 @@ Core（业务，完全复用）
 - 某点数剩余 4 张齐全、或双王都在时，对应牌条反色高亮；可用
   `--no-highlight-bombs` 关闭。
 
-当前 GUI 使用项目所有者提供的《hlddz》牌面左侧条素材。
+当前 GUI 使用项目所有者提供的 15×30 牌面左侧条素材（`games/jj/assets/cards`）。
 
 ### 目录结构
 
 ```text
-jjcounter/
+decktrace/
 ├── cli.py                     # list / shot / watch / run / games
 ├── core/
 │   ├── models.py              # WindowInfo / WindowSelector / Detection / DetectionBatch
@@ -78,7 +83,7 @@ jjcounter/
 │   ├── base.py                # GameProfile / RecognitionConfig / ResetConfig
 │   ├── registry.py            # 游戏注册表
 │   └── jj/
-│       ├── profile.py         # JJ 斗地主配置
+│       ├── profile.py         # 默认 jj profile（JJ 斗地主窗口/牌堆配置）
 │       ├── templates/         # 识别用点数/花色/大小王模板
 │       ├── assets/cards/      # GUI 用 15×30 牌面左侧条
 │       └── build_templates.py
@@ -93,7 +98,7 @@ jjcounter/
 ## 快速开始
 
 ```bash
-cd /Users/yiyi/work/jjddz
+cd /Users/yiyi/work/decktrace
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt \
   -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -113,32 +118,33 @@ python3 -m venv .venv
 ./start.sh list                          # 查看窗口
 ./start.sh list --game jj                # 按游戏窗口特征标记
 ./start.sh shot --out shots/now.png      # 单张截图
-./start.sh run --debug                   # TUI 实时记牌 + 标注图
+./start.sh run --ui tui --debug          # TUI 实时记牌 + 标注图（调试/e2e）
 ./start.sh run --once --debug            # 单帧自检
 ./start.sh watch --interval 0.5          # 只采集、不识别
 ```
 
-### GUI（置顶牌面窗口）
+### GUI（默认，置顶牌面窗口）
 
-GUI 需要额外安装 Qt：
+GUI 是默认 UI，需要额外安装 Qt：
 
 ```bash
 .venv/bin/python -m pip install -r requirements-gui.txt   -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-./start.sh run --ui gui
+./start.sh
 ```
 
+- 窗口标题固定为“斗地主记牌器”
 - 固定窗口宽度，正好放下 54 张 15×30 牌条
 - 一行排列，牌条相邻、无间距
 - 默认窗口置顶：`--no-topmost` 可关闭
 - 不显示 fps/队列，只展示剩余牌
 - 炸弹/王炸反色高亮：`--no-highlight-bombs` 可关闭
 
-TUI 仍是默认，方便调试：
+TUI 只用于调试和 e2e，需要显式指定：
 
 ```bash
-./start.sh run            # TUI
-./start.sh run --ui gui   # GUI
+./start.sh run --ui tui                  # TUI 实时记牌
+./start.sh run --ui tui --duration 30    # 跑固定时长，便于 e2e 验证
 ```
 
 ### 平台/采集后端
@@ -189,7 +195,7 @@ macOS 采集配置：
 
 新增一个游戏只需要：
 
-1. 新建 `jjcounter/games/<id>/profile.py`，定义 `GameProfile`：
+1. 新建 `decktrace/games/<id>/profile.py`，定义 `GameProfile`：
    - 窗口标题/应用名
    - `rank_totals`、`display_ranks`、`labels`
    - 识别模板目录、大小王模板/区域
@@ -235,11 +241,11 @@ class MemoryDetectionSource(DetectionSource):
 
 - 窗口最小化后无法采集；完全遮挡时系统可能降低刷新率，建议保持游戏窗口可见。
 - 程序从一局中间启动时，无法补回启动前已经出过的牌；请在发牌/开局前启动，或按 `r` 重置。
-- 当前 JJ 牌堆按标准 54 张、每点数 4 张计算；特殊模式需要新 profile。
+- 默认 `jj` profile 按标准 54 张、每点数 4 张计算；特殊模式需要新 profile。
 - 模板与游戏皮肤绑定；换字体/皮肤后运行：
 
   ```bash
-  .venv/bin/python -m jjcounter.games.jj.build_templates
+  .venv/bin/python -m decktrace.games.jj.build_templates
   ```
 
 - Windows 截图尚未实现；macOS 需要屏幕录制权限。

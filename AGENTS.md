@@ -1,14 +1,14 @@
 # AGENTS.md — 本项目的工作方式与调试经验
 
-本文件记录在 `jjddz`（JJ 斗地主图像识别记牌器）中已经验证过的开发流程、调试方法和踩坑经验。
+本文件记录在 `decktrace`（斗地主记牌器）中已经验证过的开发流程、调试方法和踩坑经验。
 后续 Agent 修改本项目时，优先遵循这里的做法；如果发现更好的方案，先验证，再更新本文件。
 
 ---
 
 ## 1. 项目目标与不可破坏的约束
 
-目标：持续截取微信小程序《JJ斗地主》窗口，识别画面中出现的牌，按“点数 + 花色”去重后，
-通过 TUI 或 GUI 展示剩余牌。平台、游戏、识别来源、UI 都必须可替换。
+目标：持续截取斗地主游戏窗口（当前默认实现为微信小程序《JJ斗地主》），识别画面中出现的牌，
+按“点数 + 花色”去重后，通过 TUI 或 GUI 展示剩余牌。平台、游戏、识别来源、UI 都必须可替换。
 
 必须保持的产品约束：
 
@@ -188,7 +188,7 @@
 模板来自当前小程序字体/皮肤。游戏更新后如果字体变了，需要重新抓样本并运行：
 
 ```bash
-.venv/bin/python -m jjcounter.games.jj.build_templates
+.venv/bin/python -m decktrace.games.jj.build_templates
 ```
 
 ---
@@ -266,7 +266,7 @@ Platform.CaptureStream ──RawFrame(BGR)──> ImageDetectionSource
                                               │
                               ┌───────────────┴───────────────┐
                               ▼                               ▼
-                        TuiRenderer                     QtCardRenderer
+                     TuiRenderer（调试/e2e）         QtCardRenderer（默认 UI）
                      （fps/队列/表格）              （置顶 54 张牌条，无 fps）
 ```
 
@@ -345,13 +345,20 @@ Platform.CaptureStream ──RawFrame(BGR)──> ImageDetectionSource
 open frames/annotated.png
 ```
 
-GUI 验收：
+GUI 验收（默认 UI，直接启动）：
 
 ```bash
-./start.sh run --ui gui
+./start.sh
 ```
 
-检查：54 张牌条能放进固定窗口、牌条相邻无间距、置顶、某点数 4 张剩余时反色。
+检查：窗口标题为“斗地主记牌器”、54 张牌条能放进固定窗口、牌条相邻无间距、置顶、
+某点数 4 张剩余时反色。
+
+TUI/e2e 验收（显式指定，不改变默认 UI）：
+
+```bash
+./start.sh run --ui tui --duration 30 --debug
+```
 
 看框是否套在牌上，尤其检查：
 
@@ -365,11 +372,14 @@ GUI 验收：
 ## 10. 代码与工程约定
 
 - 中文注释/文档，英文标识符。
+- 应用展示名统一使用 `decktrace.APP_NAME`（斗地主记牌器），用于窗口标题、TUI 标题和
+  CLI 描述；游戏名只放在 `GameProfile.name`，不要写死到 UI 或窗口标题里。
 - 终端表格用 Rich；0 留空，剩余越多颜色越深，不要再用 ANSI 手工 pad 对齐。
 - UI 通过 `core/ui/Renderer` 抽象：TUI 和 GUI 只消费 `TrackerSnapshot + GameProfile`；
   不要把画面渲染、fps 状态塞进 runtime 或识别来源。
-- TUI 保留 fps/队列/识别耗时；GUI 是纯牌面展示，不显示调试数据。
-- GUI 牌面素材在 `games/<id>/assets/cards/<card_id>.png`；JJ 使用用户提供的
+- 默认 UI 是 GUI（纯牌面展示，不显示调试数据）；TUI 只在调试/e2e 时用
+  `--ui tui` 启动，保留 fps/队列/识别耗时。
+- GUI 牌面素材在 `games/<id>/assets/cards/<card_id>.png`；`jj` profile 使用用户提供的
   15×30 左侧牌条，按原始像素尺寸展示，不放大。
 - 炸弹高亮规则：某点数剩余 4 张齐全或双王都在时反色；开局全 4 张会导致整排反色，
   这是字面结果，可用 `--no-highlight-bombs` 关闭。

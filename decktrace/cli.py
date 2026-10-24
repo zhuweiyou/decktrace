@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from . import APP_NAME
 from .core.models import WindowSelector
 from .games import get_game, list_games
 from .platforms import CaptureError, PlatformError, WindowError, create_platform
@@ -319,7 +320,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="jjcounter", description="斗地主记牌器")
+    parser = argparse.ArgumentParser(prog="decktrace", description=APP_NAME)
     sub = parser.add_subparsers(dest="command", required=True)
 
     common = argparse.ArgumentParser(add_help=False)
@@ -366,7 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--duration", type=float, default=None)
     run_p.add_argument("--once", action="store_true")
     run_p.add_argument("--no-color", action="store_true")
-    run_p.add_argument("--ui", choices=("tui", "gui"), default="tui", help="tui（默认，带调试信息）或 gui（置顶牌面图片）")
+    run_p.add_argument("--ui", choices=("tui", "gui"), default="gui", help="gui（默认，置顶牌面窗口）或 tui（调试/e2e，带 fps 等信息）")
     run_p.add_argument("--no-topmost", action="store_true", help="GUI 不置顶")
     run_p.add_argument(
         "--no-highlight-bombs", action="store_true", help="GUI 不反色高亮炸弹"
