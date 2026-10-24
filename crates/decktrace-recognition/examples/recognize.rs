@@ -6,7 +6,8 @@ fn main() {
     let game = profile();
     let recognizer = CardRecognizer::new(&game).expect("recognizer");
     let image = image::open(&path).expect("image").to_rgb8();
-    let result = recognizer.recognize(&image, true);
+    let detect_jokers = !std::env::args().any(|arg| arg == "--no-jokers");
+    let result = recognizer.recognize(&image, detect_jokers);
     println!(
         "{}x{} {} cards {:.0}ms",
         result.frame_width,

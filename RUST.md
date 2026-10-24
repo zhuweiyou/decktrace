@@ -17,7 +17,6 @@ Python 版本暂时保留，作为识别结果的对照 oracle；Rust 侧跑通�
 
 - Windows 采集后端（只保留 trait 抽象）
 - GUI 的拖动位置持久化、错误提示细节、`.app` 打包/签名
-- 性能优化到 Python 版的 15–25ms/帧（当前 release 约 40–50ms/帧）
 
 ## Workspace
 
@@ -72,6 +71,26 @@ cargo test --release --workspace
 - `bj_bottom_real.png`：20 张，底牌大小王与手牌大小王共存
 - `joker_miss.png`：22 张，压缩小王在底牌区
 - `shots/` 全量：可运行 `DECKTRACE_TIMING=1` 看 masks/cards/jokers 分段耗时
+
+## 性能
+
+实测（release，1800×1100）：
+
+- 不做大小王搜索：约 **15–22ms/帧**
+- 做大小王搜索：约 **30–35ms/帧**
+- 大小王都已有下落（底牌/已见）后，运行时自动完全跳过王搜索
+- 采集目标 15fps，TUI 实测约 15fps
+
+之前 Rust 版 50ms 的原因：
+
+1. 红/黑掩码、普通牌、大小王搜索全是串行；
+2. `imageproc` 的连通域是通用标量实现，而 Python 用的是 OpenCV 的 C++ 优化实现；
+3. 大小王全流程（粗搜索 + 局部 CCOEFF）每次都跑；
+4. 不能拿 Python 的“大小王确认后的 15–25ms”直接对比 Rust 的“含王搜索 50ms”，
+   两者不是同一条路径。
+
+现在已做：红/黑并行、普通牌与大小王并行、双王已知后跳过王搜索。后续如果还要压，
+优先看连通域实现和局部 CCOEFF 的 SIMD/积分图优化。
 
 ## macOS 采集
 

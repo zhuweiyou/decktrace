@@ -102,53 +102,48 @@ impl CardRecognizer {
         let (red, dark) = masks(image);
         let combined = combine(&red, &dark);
         let t_masks = started.elapsed();
-        let mut raw = Vec::new();
-
-        for (color, mask) in [("red", &red), ("black", &dark)] {
-            for comp in components(mask) {
-                if !(12..=80).contains(&comp.w) || !(12..=85).contains(&comp.h) {
-                    continue;
+        let (mut kept, jokers) = rayon::join(
+            || self.detect_cards(image, &red, &dark),
+            || {
+                if detect_jokers {
+                    self.detect_jokers(image, &combined, &red, &dark)
+                } else {
+                    Vec::new()
                 }
-                let aspect = comp.w as f32 / comp.h as f32;
-                if !(0.65..=1.45).contains(&aspect) {
-                    continue;
-                }
-                let fill = comp.area as f32 / (comp.w * comp.h) as f32;
-                if fill < 0.28 || comp.area < 120 {
-                    continue;
-                }
-                let Some((rx, ry, rw, rh)) = rank_bbox(mask, comp.x, comp.y, comp.w, comp.h) else {
-                    continue;
-                };
-                let rank_crop = crop(mask, rx, ry, rw, rh);
-                let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
-                let suit_crop = crop(mask, comp.x, comp.y, comp.w, comp.h);
-                let (suit, suit_score) = self.classify_suit(&suit_crop, color);
-                if rank_score < self.cfg.rank_min_score
-                    || suit_score < self.cfg.suit_min_score
-                    || rank_score - second_score < self.cfg.rank_margin
-                {
-                    continue;
-                }
-                let face = face_fraction(image, comp.x, comp.y, comp.w, comp.h);
-                if face < self.cfg.face_min_fraction {
-                    continue;
-                }
-                raw.push(Detection {
-                    rank: rank.clone(),
-                    suit: suit.clone(),
-                    score: rank_score * 0.7 + suit_score * 0.3,
-                    bbox: (comp.x, comp.y, comp.w, comp.h),
-                    rank_score,
-                    suit_score,
-                    face_score: face,
-                    display: self.label(&rank, &suit),
-                    is_bottom: false,
-                });
-            }
+            },
+        );
+        kept.extend(jokers);
+        if timing {
+            eprintln!(
+                "[timing] masks={:.0}ms total={:.0}ms",
+                t_masks.as_secs_f64() * 1000.0,
+                started.elapsed().as_secs_f64() * 1000.0
+            );
         }
 
-        let t_cards = started.elapsed();
+        let mut kept = if let Some(bottom) = &self.bottom {
+            bottom.mark(image, kept)
+        } else {
+            kept
+        };
+        kept.sort_by_key(|d| (d.bbox.1 / 100, d.bbox.0));
+
+        RecognitionResult {
+            detections: kept,
+            elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
+            frame_width: width,
+            frame_height: height,
+        }
+    }
+
+    fn detect_cards(&self, image: &RgbImage, red: &GrayImage, dark: &GrayImage) -> Vec<Detection> {
+        // 红/黑两套掩码互不依赖，并行处理。
+        let (mut red_raw, mut black_raw) = rayon::join(
+            || self.detect_color(image, red, "red"),
+            || self.detect_color(image, dark, "black"),
+        );
+        red_raw.append(&mut black_raw);
+        let mut raw = red_raw;
         raw.sort_by(|a, b| b.score.total_cmp(&a.score));
         let mut kept: Vec<Detection> = Vec::new();
         for det in raw {
@@ -166,33 +161,53 @@ impl CardRecognizer {
                 kept.push(det);
             }
         }
+        kept
+    }
 
-        if detect_jokers {
-            kept.extend(self.detect_jokers(image, &combined, &red, &dark));
+    fn detect_color(&self, image: &RgbImage, mask: &GrayImage, color: &str) -> Vec<Detection> {
+        let mut raw = Vec::new();
+        for comp in components(mask) {
+            if !(12..=80).contains(&comp.w) || !(12..=85).contains(&comp.h) {
+                continue;
+            }
+            let aspect = comp.w as f32 / comp.h as f32;
+            if !(0.65..=1.45).contains(&aspect) {
+                continue;
+            }
+            let fill = comp.area as f32 / (comp.w * comp.h) as f32;
+            if fill < 0.28 || comp.area < 120 {
+                continue;
+            }
+            let Some((rx, ry, rw, rh)) = rank_bbox(mask, comp.x, comp.y, comp.w, comp.h) else {
+                continue;
+            };
+            let rank_crop = crop(mask, rx, ry, rw, rh);
+            let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
+            let suit_crop = crop(mask, comp.x, comp.y, comp.w, comp.h);
+            let (suit, suit_score) = self.classify_suit(&suit_crop, color);
+            if rank_score < self.cfg.rank_min_score
+                || suit_score < self.cfg.suit_min_score
+                || rank_score - second_score < self.cfg.rank_margin
+            {
+                continue;
+            }
+            let face = face_fraction(image, comp.x, comp.y, comp.w, comp.h);
+            if face < self.cfg.face_min_fraction {
+                continue;
+            }
+            raw.push(Detection {
+                rank: rank.clone(),
+                suit: suit.clone(),
+                score: rank_score * 0.7 + suit_score * 0.3,
+                bbox: (comp.x, comp.y, comp.w, comp.h),
+                rank_score,
+                suit_score,
+                face_score: face,
+                display: self.label(&rank, &suit),
+                is_bottom: false,
+            });
         }
-        let t_jokers = started.elapsed();
-        if timing {
-            eprintln!(
-                "[timing] masks={:.0}ms cards={:.0}ms jokers={:.0}ms",
-                t_masks.as_secs_f64() * 1000.0,
-                (t_cards - t_masks).as_secs_f64() * 1000.0,
-                (t_jokers - t_cards).as_secs_f64() * 1000.0,
-            );
-        }
-
-        let mut kept = if let Some(bottom) = &self.bottom {
-            bottom.mark(image, kept)
-        } else {
-            kept
-        };
-        kept.sort_by_key(|d| (d.bbox.1 / 100, d.bbox.0));
-
-        RecognitionResult {
-            detections: kept,
-            elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
-            frame_width: width,
-            frame_height: height,
-        }
+        raw
     }
 
     fn label(&self, rank: &str, suit: &str) -> String {

@@ -81,6 +81,13 @@ impl CardTracker {
         &self.bottom_ids
     }
 
+    /// 大小王都已有下落（底牌或已出/已见）时，牌堆里不可能还有第三张王，
+    /// 后续帧可以完全跳过大小王模板搜索。
+    pub fn jokers_known(&self) -> bool {
+        let known = |id: &str| self.seen_ids.contains(id) || self.bottom_ids.contains(id);
+        known("BJ") && known("SJ")
+    }
+
     /// 消费一帧检测结果，返回本帧新入账的牌。
     pub fn observe(&mut self, detections: &[Detection], now: f64) -> Vec<Detection> {
         let mut just_armed = false;

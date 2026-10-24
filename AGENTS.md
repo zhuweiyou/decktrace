@@ -464,7 +464,10 @@ TUI/e2e 验收（显式指定，不改变默认 UI）：
   否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 大小王匹配是“1/4 粗搜索 + 全分辨率局部 CCOEFF_NORMED”；改阈值时先用
   `DECKTRACE_TIMING=1` 看 masks/cards/jokers 分段耗时，再跑全部 golden 截图。
-- 当前已知差距：Rust release 单帧约 40–50ms（Python 约 15–25ms），Windows 后端未实现。
+- 性能：Rust release 无王搜索约 15–22ms/帧，含王搜索约 30–35ms/帧；双王都有下落后
+  运行时自动跳过王搜索。不要拿 Python 的“王确认后 15–25ms”对比 Rust 的含王路径。
+- 已做优化：红/黑掩码并行、普通牌与大小王并行、双王已知后跳过王搜索。
+- 当前已知差距：Windows 后端未实现。
 
 ---
 

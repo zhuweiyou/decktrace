@@ -181,9 +181,8 @@ impl Session {
         self.frames += 1;
         self.frame_no += 1;
         let now = self.started.elapsed().as_secs_f64();
-        let result = self
-            .recognizer
-            .recognize(&frame.image, self.frame_no % 2 == 0);
+        let detect_jokers = self.frame_no % 2 == 0 && !self.tracker.jokers_known();
+        let result = self.recognizer.recognize(&frame.image, detect_jokers);
         self.last_recognition_ms = result.elapsed_ms;
         self.auto_reset.maybe_reset(
             &mut self.tracker,
