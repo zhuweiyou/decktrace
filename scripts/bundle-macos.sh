@@ -11,6 +11,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 
 cp "$ROOT/target/release/decktrace" "$APP/Contents/MacOS/decktrace"
 cp -R "$ROOT/crates/decktrace-jj/assets" "$APP/Contents/Resources/assets/jj"
+cp "$ROOT/crates/decktrace/assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 VERSION="$(cargo pkgid -p decktrace 2>/dev/null | sed 's/.*#//')"
 [ -n "$VERSION" ] || VERSION="0.1.0"
@@ -30,6 +31,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <string>6.0</string>
     <key>CFBundleName</key>
     <string>decktrace</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleDisplayName</key>
     <string>斗地主记牌器</string>
     <key>CFBundlePackageType</key>

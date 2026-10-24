@@ -99,6 +99,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
 - 打包脚本会拷贝 `crates/decktrace-jj/assets` 到 `Contents/Resources/assets/jj`。
+- App 图标：`crates/decktrace/assets/AppIcon.icns`，打包到 `Contents/Resources`，Info.plist 用 `CFBundleIconFile=AppIcon`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
 - 正式分发需要 Developer ID 签名和公证；当前脚本只是 ad-hoc 签名。
