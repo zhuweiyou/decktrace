@@ -23,6 +23,10 @@ macOS 上的斗地主图像识别记牌器：持续截取目标窗口，识别�
 
 # 开发时直接运行（会继承终端已有的屏幕录制权限）
 cargo run --release -p decktrace
+
+# 常用参数（GUI 同样支持）
+cargo run --release -p decktrace -- --fps 15 --min-hits 2
+cargo run --release -p decktrace -- --no-auto-reset
 ```
 
 `decktrace.app` 的内部可执行文件名为 `decktrace`。首次通过 `.app` 启动时，macOS 会要求

@@ -703,28 +703,40 @@ fn coarse_candidates(
 
     // 直接在缩小图上算 CCOEFF_NORMED：比 CCORR_NORMED 更能排除暗色 UI 误匹配。
     let mut candidates = ccoeff_scan(&small_search, &small_template, threshold * 0.85);
-    candidates.truncate(6);
+    candidates.truncate(4);
 
     let mut verified = Vec::new();
     for (x, y, _coarse_score) in candidates {
         let fx = (x * factor).min(search.width().saturating_sub(template.width()));
         let fy = (y * factor).min(search.height().saturating_sub(template.height()));
-        let pad = factor * 2;
-        let wx = fx.saturating_sub(pad);
-        let wy = fy.saturating_sub(pad);
-        let wx1 = (fx + template.width() + pad).min(search.width());
-        let wy1 = (fy + template.height() + pad).min(search.height());
-        if wx1 <= wx + template.width() || wy1 <= wy + template.height() {
-            continue;
-        }
-        let window = crop(search, wx, wy, wx1 - wx, wy1 - wy);
-        if let Some((ox, oy, score)) = best_ccoeff(&window, template) {
-            if score >= threshold {
-                verified.push((wx + ox, wy + oy, score));
-            }
+        // 大多数真候选离粗定位不超过 4px；先搜小窗口，失败再扩大。
+        let found = verify_candidate(search, template, fx, fy, factor, threshold)
+            .or_else(|| verify_candidate(search, template, fx, fy, factor * 2, threshold));
+        if let Some(hit) = found {
+            verified.push(hit);
         }
     }
     verified
+}
+
+fn verify_candidate(
+    search: &GrayImage,
+    template: &GrayImage,
+    fx: u32,
+    fy: u32,
+    pad: u32,
+    threshold: f32,
+) -> Option<(u32, u32, f32)> {
+    let wx = fx.saturating_sub(pad);
+    let wy = fy.saturating_sub(pad);
+    let wx1 = (fx + template.width() + pad).min(search.width());
+    let wy1 = (fy + template.height() + pad).min(search.height());
+    if wx1 <= wx + template.width() || wy1 <= wy + template.height() {
+        return None;
+    }
+    let window = crop(search, wx, wy, wx1 - wx, wy1 - wy);
+    let (ox, oy, score) = best_ccoeff(&window, template)?;
+    (score >= threshold).then_some((wx + ox, wy + oy, score))
 }
 
 /// 小图上完整扫描 CCOEFF_NORMED，返回按分数排序的局部极大值。

@@ -3,13 +3,15 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use decktrace::{Session, SessionConfig, get_game};
-use decktrace_capture::{Platform, WindowInfo};
+use decktrace_capture::Platform;
 use decktrace_jj::JjRecognizer;
-use decktrace_tracking::{CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot};
+use decktrace_tracking::{
+    CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot, WindowSelector,
+};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
@@ -30,6 +32,10 @@ struct Args {
     window_id: Option<u32>,
     #[arg(long, default_value_t = 2)]
     min_hits: usize,
+    #[arg(long, default_value_t = 15.0)]
+    fps: f32,
+    #[arg(long)]
+    no_auto_reset: bool,
 }
 
 enum Message {
@@ -40,19 +46,21 @@ enum Message {
 fn main() -> Result<()> {
     let args = Args::parse();
     let game = get_game(&args.game).map_err(anyhow::Error::msg)?.clone();
-    let window = find_window(&args, &game)?;
+    let selector = window_selector(&args, &game);
 
     let (tx, rx) = bounded::<Message>(1);
     let stop = Arc::new(AtomicBool::new(false));
     let reset = Arc::new(AtomicBool::new(false));
     spawn_worker(
         game.clone(),
-        window,
+        selector,
         tx,
         rx.clone(),
         stop.clone(),
         reset.clone(),
         args.min_hits,
+        args.fps,
+        !args.no_auto_reset,
     )?;
 
     let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
@@ -74,8 +82,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn find_window(args: &Args, game: &GameProfile) -> Result<WindowInfo> {
-    let platform = create_platform()?;
+fn window_selector(args: &Args, game: &GameProfile) -> WindowSelector {
     let mut selector = game.window.clone();
     if let Some(title) = &args.title {
         selector.title = title.clone();
@@ -86,26 +93,26 @@ fn find_window(args: &Args, game: &GameProfile) -> Result<WindowInfo> {
     if let Some(id) = args.window_id {
         selector.window_id = Some(id);
     }
-    platform
-        .window_service()
-        .find_window(&selector)
-        .context("查找目标窗口失败")
+    selector
 }
 
 fn spawn_worker(
     game: GameProfile,
-    window: WindowInfo,
+    selector: WindowSelector,
     tx: Sender<Message>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
     reset: Arc<AtomicBool>,
     min_hits: usize,
+    fps: f32,
+    auto_reset: bool,
 ) -> Result<()> {
     std::thread::Builder::new()
         .name("capture".to_string())
         .spawn(move || {
             let result = (|| -> Result<()> {
                 let platform = create_platform()?;
+                let window = platform.window_service().find_window(&selector)?;
                 let recognizer: SharedRecognizer =
                     Arc::new(JjRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?);
                 let mut session = Session::new(
@@ -114,7 +121,9 @@ fn spawn_worker(
                     &window,
                     recognizer,
                     SessionConfig {
+                        fps,
                         min_hits,
+                        auto_reset,
                         ..SessionConfig::default()
                     },
                 )?;
