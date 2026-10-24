@@ -451,9 +451,8 @@ def _status_line(
     age = last_frame.age if last_frame else 0.0
     det_count = len(result.detections) if result else 0
     return (
-        f"采集 {producer.fps:0.1f}fps · 识别 {recognition_ms:0.0f}ms · "
-        f"队列 {qsize} · 丢帧 {dropped} · 本帧牌 {det_count} · "
-        f"画面延迟 {age:0.1f}s · 错误 {errors} · 自动重置 {auto_resets}"
+        f"{producer.fps:0.1f}fps · 识别 {recognition_ms:.0f}ms · "
+        f"队列 {qsize} · 延迟 {age:.1f}s · 错 {errors} · 重置 {auto_resets}"
     )
 
 

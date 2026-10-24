@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import io
 import time
-import unicodedata
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Set
 
-from .recognition import Detection, SUIT_NAMES
+from rich import box
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+
+from .recognition import Detection
 
 RANK_TOTALS = {
     "BJ": 1,
@@ -168,45 +173,34 @@ class CardTracker:
 
 # ---------------- 终端表格 ----------------
 
-RESET = "\033[0m"
-BOLD = "\033[1m"
-DIM = "\033[2m"
-RED = "\033[31m"
-GREEN = "\033[32m"
-YELLOW = "\033[33m"
-CYAN = "\033[36m"
-GREY = "\033[90m"
+# 剩余越多，颜色越深；0 留空
+COUNT_STYLES = {
+    1: "#93c5fd",  # 浅蓝
+    2: "#60a5fa",
+    3: "#2563eb",
+    4: "#1e3a8a",  # 深蓝，深色背景下仍可读
+}
 
 
-def _display_width(text: str) -> int:
-    return sum(
-        2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1 for ch in text
-    )
+def _count_style(value: int, total: int) -> str:
+    if value <= 0:
+        return ""
+    if total == 1:
+        # 大小王只剩 1 张就是“满”的，直接给最深色
+        return "bold #1e3a8a"
+    color = COUNT_STYLES.get(value, "#1e3a8a")
+    return f"{color} bold" if value >= 3 else color
 
 
-def _pad(text: str, width: int) -> str:
-    return text + " " * max(0, width - _display_width(text))
-
-
-def _color_count(value: int, color: bool) -> str:
-    text = str(value)
-    if not color:
-        return text
-    if value == 0:
-        return f"{RED}{BOLD}{text}{RESET}"
-    if value == 1:
-        return f"{YELLOW}{BOLD}{text}{RESET}"
-    return f"{GREEN}{text}{RESET}"
-
-
-def _color_card(det: Detection, color: bool) -> str:
-    if not color:
-        return det.label
+def _card_text(det: Detection) -> Text:
+    text = Text(det.label)
     if det.rank == "BJ":
-        return f"{RED}{BOLD}{det.label}{RESET}"
-    if det.rank == "SJ":
-        return f"{GREY}{BOLD}{det.label}{RESET}"
-    return f"{CYAN}{det.label}{RESET}"
+        text.stylize("bold #dc2626")
+    elif det.rank == "SJ":
+        text.stylize("bold #64748b")
+    elif det.suit in ("H", "D"):
+        text.stylize("#dc2626")
+    return text
 
 
 def render_table(
@@ -217,45 +211,79 @@ def render_table(
     recent: Optional[Sequence[Detection]] = None,
     width: int = 78,
 ) -> str:
-    """生成终端表格；不负责清屏。"""
+    """生成带边框的终端记牌表；不负责清屏。"""
+
+    buffer = io.StringIO()
+    console = Console(
+        file=buffer,
+        record=True,
+        width=width,
+        color_system="truecolor" if color else None,
+        force_terminal=color,
+        force_jupyter=False,
+    )
+
+    table = Table(
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold #64748b",
+        border_style="#94a3b8",
+        padding=(0, 1),
+        expand=False,
+    )
+    for rank in DISPLAY_RANKS:
+        table.add_column(
+            Text(LABELS.get(rank, rank), justify="center"),
+            justify="center",
+            no_wrap=True,
+        )
 
     counts = snapshot.counts
-    headers = [_pad(LABELS.get(rank, rank), 4) for rank in DISPLAY_RANKS]
-    values = []
+    cells = []
     for rank in DISPLAY_RANKS:
         value = counts.get(rank, 0)
-        values.append(_color_count(value, color) + " " * max(0, 4 - len(str(value))))
+        total = RANK_TOTALS[rank]
+        if value <= 0:
+            cells.append(Text(""))
+            continue
+        cell = Text(str(value))
+        style = _count_style(value, total)
+        if color and style:
+            cell.stylize(style)
+        cells.append(cell)
+    table.add_row(*cells)
 
-    title = "JJ 斗地主 · 记牌器"
-    stats = f"已识别 {snapshot.seen_count}/54   剩余 {snapshot.remaining} 张"
-    gap = max(1, width - _display_width(title) - _display_width(stats))
-    line1 = f"{BOLD}{title}{RESET}" + " " * gap + stats if color else f"{title}{' ' * gap}{stats}"
-
-    rule = "─" * width
-    header_line = " ".join(headers).rstrip()
-    value_line = " ".join(values).rstrip()
-
-    recent = list(recent if recent is not None else snapshot.recent)[-8:]
-    if recent:
-        recent_text = "  ".join(_color_card(det, color) for det in recent)
-    else:
-        recent_text = "等待识别到牌…"
-
-    lines = [
-        line1,
-        rule,
-        header_line,
-        value_line,
-        rule,
-        f"最近入账：{recent_text}",
-    ]
-    if status:
-        lines.append(status)
-    lines.append(
-        "r 重置本局    Ctrl+C 退出"
-        + ("    （只有数字+花色同时成立才会计入）" if color else "")
+    title = Text.assemble(
+        ("JJ 斗地主 · 记牌器", "bold"),
+        "    ",
+        (
+            f"已识别 {snapshot.seen_count}/54   剩余 {snapshot.remaining} 张",
+            "dim #64748b",
+        ),
     )
-    return "\n".join(lines)
+
+    recent_items = list(recent if recent is not None else snapshot.recent)[-8:]
+    recent_line = Text("最近入账：", style="dim")
+    if recent_items:
+        for index, det in enumerate(recent_items):
+            if index:
+                recent_line.append("  ")
+            recent_line.append_text(_card_text(det))
+    else:
+        recent_line.append("等待识别到牌…", style="dim")
+
+    console.print(title)
+    console.print(table)
+    console.print(recent_line)
+    if status:
+        console.print(Text(status, style="dim #64748b"))
+    console.print(
+        Text(
+            "颜色越深 = 剩余越多；0 不显示    r 重置本局    Ctrl+C 退出",
+            style="dim",
+        )
+    )
+    return buffer.getvalue()
 
 
 def clear_screen() -> str:

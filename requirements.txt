@@ -1,3 +1,4 @@
 Pillow>=9.0
 numpy>=1.21
 opencv-python-headless>=4.8
+rich>=13.0
