@@ -23,7 +23,7 @@
    - 底牌区为空、背面或没认全时，所有排除都不算数。
    - 底牌可见 ≠ 已出：底牌仍计入剩余，只有真正打出后才扣除。
 4. **采集不能被识别拖慢。**
-   - ScreenCaptureKit 回调只负责入队；识别消费最新帧，队列满丢旧帧。
+   - 采集回调只负责入队；识别消费最新帧，队列满丢旧帧。
 5. **没有真实画面验证，不算完成。**
    - 必须实际截图/启动 GUI，确认识别和显示结果。
 
@@ -157,7 +157,9 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - 印章素材：`crates/decktrace/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入二进制。
 - 窗口置顶、不可缩放；标题为“斗地主记牌器”。
 
-## 7. macOS 采集与打包
+## 7. 采集与打包
+
+### macOS
 
 - 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
 - `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
@@ -170,6 +172,12 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
 - 正式分发需要 Developer ID 签名和公证；当前脚本只是 ad-hoc 签名。
+
+### Windows
+
+- 当前 `crates/decktrace-capture/src/windows.rs` 是可编译占位，窗口枚举和帧流尚未实现。
+- 接入 Windows Graphics Capture / PrintWindow 时，在 `capture` 的 Windows `cfg` 分支内实现，
+  不要让 `Session` 或游戏层出现平台判断。
 
 ## 8. 测试与验收
 
