@@ -140,6 +140,11 @@ pub struct Session {
     stream: Box<dyn CaptureStream>,
     started: Instant,
     frame_no: u64,
+    trace: bool,
+    trace_seen: usize,
+    trace_armed: bool,
+    trace_bottoms: BTreeSet<String>,
+    trace_bottom_det: BTreeSet<String>,
 }
 
 impl Session {
@@ -166,6 +171,11 @@ impl Session {
             stream,
             started: Instant::now(),
             frame_no: 0,
+            trace: std::env::var("DECKTRACE_TRACE").is_ok(),
+            trace_seen: usize::MAX,
+            trace_armed: false,
+            trace_bottoms: BTreeSet::new(),
+            trace_bottom_det: BTreeSet::new(),
         })
     }
 
@@ -196,8 +206,38 @@ impl Session {
             frame.height,
             now,
         );
-        self.tracker.observe(&result.detections, now);
-        Ok(Some(self.tracker.snapshot()))
+        let committed = self.tracker.observe(&result.detections, now);
+        let snapshot = self.tracker.snapshot();
+        if self.trace {
+            let bottom_det: BTreeSet<String> = result
+                .detections
+                .iter()
+                .filter(|det| det.is_bottom)
+                .map(|det| det.card_id())
+                .collect();
+            let changed = !committed.is_empty()
+                || snapshot.armed != self.trace_armed
+                || snapshot.seen_count != self.trace_seen
+                || snapshot.bottom_ids != self.trace_bottoms;
+            if changed || (!bottom_det.is_empty() && bottom_det != self.trace_bottom_det) {
+                let new_ids: Vec<String> =
+                    committed.iter().map(|det| det.card_id()).collect();
+                eprintln!(
+                    "[trace] t={now:.1}s armed={} seen={} remaining={} new={new_ids:?} bottoms={:?} bottom_det={bottom_det:?} det={} {:.1}ms",
+                    snapshot.armed,
+                    snapshot.seen_count,
+                    snapshot.remaining,
+                    snapshot.bottom_ids,
+                    result.detections.len(),
+                    result.elapsed_ms
+                );
+                self.trace_seen = snapshot.seen_count;
+                self.trace_armed = snapshot.armed;
+                self.trace_bottoms = snapshot.bottom_ids.clone();
+                self.trace_bottom_det = bottom_det;
+            }
+        }
+        Ok(Some(snapshot))
     }
 
     pub fn reset(&mut self) {
