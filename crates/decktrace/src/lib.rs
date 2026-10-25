@@ -3,5 +3,5 @@
 pub mod registry;
 pub mod session;
 
-pub use registry::{get_game, list_games};
+pub use registry::{create_recognizer, get_game, list_games};
 pub use session::{Session, SessionConfig};

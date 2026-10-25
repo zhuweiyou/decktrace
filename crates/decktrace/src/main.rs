@@ -6,12 +6,9 @@ use std::time::Duration;
 use anyhow::Result;
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace::{Session, SessionConfig, get_game};
+use decktrace::{Session, SessionConfig, create_recognizer, get_game};
 use decktrace_capture::Platform;
-use decktrace_jj::JjRecognizer;
-use decktrace_tracking::{
-    CardTracker, GameProfile, SharedRecognizer, TrackerSnapshot, WindowSelector,
-};
+use decktrace_tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 
@@ -119,8 +116,7 @@ fn spawn_worker(
             let result = (|| -> Result<()> {
                 let platform = create_platform()?;
                 let window = platform.window_service().find_window(&selector)?;
-                let recognizer: SharedRecognizer =
-                    Arc::new(JjRecognizer::new(&game).map_err(|err| anyhow::anyhow!("{err}"))?);
+                let recognizer = create_recognizer(&game).map_err(anyhow::Error::msg)?;
                 let mut session = Session::new(
                     platform.as_ref(),
                     game,
