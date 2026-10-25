@@ -135,7 +135,7 @@ red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点�
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
-真实截图回归在 `crates/decktrace-jj/tests/golden.rs`，依赖根目录 `shots/`；
+真实截图回归在 `crates/decktrace-jj/tests/golden.rs`，依赖根目录 `shots/`（本地目录，不入库）；
 样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
 ## 5. 底牌门控

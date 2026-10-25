@@ -2,11 +2,9 @@
 target/
 dist/
 
-# 运行时帧与调试图
-frames/*
-!frames/.gitkeep
-shots/*
-!shots/.gitkeep
+# 运行时帧与本地测试截图，不入库
+frames/
+shots/
 
 # 日志与系统文件
 *.log
