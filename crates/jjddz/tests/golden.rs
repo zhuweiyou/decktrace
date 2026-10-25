@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use jj::{JjRecognizer, profile};
+use jjddz::{JjddzRecognizer, profile};
 use tracking::RecognitionResult;
 
 fn shots_dir() -> PathBuf {
@@ -14,7 +14,7 @@ fn recognize(name: &str) -> Option<RecognitionResult> {
         return None;
     }
     let game = profile();
-    let recognizer = JjRecognizer::new(&game).expect("recognizer");
+    let recognizer = JjddzRecognizer::new(&game).expect("recognizer");
     let image = image::open(&path).expect("image").to_rgb8();
     Some(recognizer.recognize(&image, true))
 }

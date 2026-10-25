@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "crates/tracking",
-    "crates/jj",
+    "crates/jjddz",
     "crates/capture",
     "crates/decktrace",
     "xtask",

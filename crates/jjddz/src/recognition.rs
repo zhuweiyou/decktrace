@@ -42,7 +42,7 @@ struct Scratch {
     combined: Vec<u8>,
 }
 
-pub struct JjRecognizer {
+pub struct JjddzRecognizer {
     cfg: RecognitionConfig,
     ranks: BTreeMap<String, GrayImage>,
     suits: BTreeMap<String, GrayImage>,
@@ -52,7 +52,7 @@ pub struct JjRecognizer {
     scratch: Mutex<Scratch>,
 }
 
-impl JjRecognizer {
+impl JjddzRecognizer {
     pub fn new(game: &GameProfile) -> Result<Self, RecognitionError> {
         let base = Path::new(&game.templates_dir);
         let rank_dir = base.join("ranks");
@@ -399,9 +399,9 @@ impl JjRecognizer {
     }
 }
 
-impl Recognizer for JjRecognizer {
+impl Recognizer for JjddzRecognizer {
     fn recognize(&self, image: &RgbImage, detect_jokers: bool) -> RecognitionResult {
-        JjRecognizer::recognize(self, image, detect_jokers)
+        JjddzRecognizer::recognize(self, image, detect_jokers)
     }
 }
 

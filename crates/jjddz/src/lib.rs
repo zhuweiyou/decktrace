@@ -4,4 +4,4 @@ pub mod profile;
 pub mod recognition;
 
 pub use profile::profile;
-pub use recognition::{JjRecognizer, RecognitionError};
+pub use recognition::{JjddzRecognizer, RecognitionError};

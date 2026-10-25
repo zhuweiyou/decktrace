@@ -32,7 +32,7 @@
 ```text
 crates/
   tracking/          # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
-  jj/                # JJ 实现：profile、templates、cards、recognition
+  jjddz/             # JJ 实现：profile、templates、cards、recognition
   capture/           # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
   decktrace/         # GUI + Session + registry（二进制 decktrace）
 xtask/               # 开发任务：cargo xtask package-macos
@@ -44,17 +44,17 @@ docs/adding-a-game.md  # 新游戏接入指南
 ```text
 tracking
   ↑        ↑         ↑
-  jj    capture   decktrace（应用层）
+  jjddz  capture   decktrace（应用层）
 ```
 
 规则：
 
-- 每个游戏一个独立 crate：`crates/<game>`（例如 `crates/jj`）；内部包一律 `publish = false`。
+- 每个游戏一个独立 crate：`crates/<game>`（例如 `crates/jjddz`）；内部包一律 `publish = false`。
 - 新增游戏完整步骤见 `docs/adding-a-game.md`；注册表在 `decktrace/src/registry.rs`。
 - 应用默认 `--game auto`，扫描所有已注册游戏的窗口并自动选择；`--game <id>` 仅用于调试覆盖。
 - 通用层只依赖 `tracking` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `capture` 的采集 trait。
 - capture 的抽象和实现内聚在 `capture`，平台差异只用 `cfg` 和 target-specific dependencies。
-- 模板识别属于各游戏自己的 crate（如 `jj/src/recognition.rs`），不要恢复独立识别 crate。
+- 模板识别属于各游戏自己的 crate（如 `jjddz/src/recognition.rs`），不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 - `README.md` 只写用户文档，开发内容不要写回去。
 
@@ -106,7 +106,7 @@ ScreenCaptureKit
 ```bash
 cargo test --release --workspace
 cargo run --release -p decktrace          # 自动检测游戏窗口
-cargo run --release -p decktrace -- --game jj  # 调试时强制指定
+cargo run --release -p decktrace -- --game jjddz  # 调试时强制指定
 cargo build --release -p decktrace        # 只编译
 cargo xtask package-macos                 # 生成 dist/decktrace.app
 open dist/decktrace.app                   # 运行打包产物
@@ -135,7 +135,7 @@ red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点�
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
-真实截图回归在 `crates/jj/tests/golden.rs`，依赖根目录 `shots/`（本地目录，不入库）；
+真实截图回归在 `crates/jjddz/tests/golden.rs`，依赖根目录 `shots/`（本地目录，不入库）；
 样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
 ## 5. 底牌门控

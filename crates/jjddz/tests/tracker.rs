@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use jj::profile;
+use jjddz::profile;
 use tracking::{CardTracker, Detection, GameProfile};
 
 fn game() -> GameProfile {

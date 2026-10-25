@@ -5,8 +5,8 @@ use tracking::{GameProfile, SharedRecognizer};
 /// 游戏注册表。新增游戏时在这里加一个分支，并新建 `decktrace-game-xxx` crate。
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
     match id {
-        "jj" => {
-            let game = jj::profile();
+        "jjddz" => {
+            let game = jjddz::profile();
             game.validate()?;
             Ok(game)
         }
@@ -22,14 +22,14 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
 }
 
 pub fn list_games() -> Vec<GameProfile> {
-    vec![jj::profile()]
+    vec![jjddz::profile()]
 }
 
 /// 为游戏创建识别器。新增游戏时在这里加一个分支。
 pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String> {
     match game.id.as_str() {
-        "jj" => {
-            let recognizer = jj::JjRecognizer::new(game).map_err(|err| err.to_string())?;
+        "jjddz" => {
+            let recognizer = jjddz::JjddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))
         }
         other => Err(format!("没有为游戏 {other} 注册识别器")),

@@ -1023,7 +1023,7 @@ dependencies = [
  "crossbeam-channel",
  "eframe",
  "image",
- "jj",
+ "jjddz",
  "tracking",
 ]
 
@@ -2033,7 +2033,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "jj"
+name = "jjddz"
 version = "0.1.0"
 dependencies = [
  "image",

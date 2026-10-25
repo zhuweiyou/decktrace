@@ -11,7 +11,7 @@ name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-jj = { path = "../jj" }
+jjddz = { path = "../jjddz" }
 capture = { path = "../capture" }
 tracking = { path = "../tracking" }
 anyhow.workspace = true

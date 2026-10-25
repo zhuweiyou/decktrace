@@ -1,9 +1,9 @@
-use jj::{JjRecognizer, profile};
+use jjddz::{JjddzRecognizer, profile};
 
 fn main() {
     let path = std::env::args().nth(1).expect("usage: recognize <image>");
     let game = profile();
-    let recognizer = JjRecognizer::new(&game).expect("recognizer");
+    let recognizer = JjddzRecognizer::new(&game).expect("recognizer");
     let image = image::open(&path).expect("image").to_rgb8();
     let result = recognizer.recognize(&image, true);
     println!(

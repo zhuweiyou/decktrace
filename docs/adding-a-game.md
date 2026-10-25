@@ -1,6 +1,6 @@
 # 新增游戏接入指南
 
-本文以新增「欢乐斗地主」（ID: `hl`）为例。目标是新增一个 `hl` crate，
+本文以新增「欢乐斗地主」（ID: `hlddz`）为例。目标是新增一个 `hlddz` crate，
 提供 `GameProfile` 和 `Recognizer`，然后注册到应用。
 
 采集、`Session`、GUI 不需要为单个游戏修改。
@@ -12,7 +12,7 @@
 - 只开一个支持的游戏窗口：自动进入该游戏
 - 同时开多个：按 `list_games()` 注册顺序选第一个，并在 stderr 打印提示
 - 一个都没开：GUI 显示 `Waiting for game window...`，每 500ms 重试
-- 调试/强制指定：`--game jj`、`--game hl`
+- 调试/强制指定：`--game jjddz`、`--game hlddz`
 
 新增游戏后只需要保证它出现在 `list_games()` 和 `create_recognizer()` 里。
 
@@ -21,14 +21,14 @@
 在根 `Cargo.toml` 的 `workspace.members` 增加：
 
 ```toml
-"crates/hl",
+"crates/hlddz",
 ```
 
-新建 `crates/hl/Cargo.toml`：
+新建 `crates/hlddz/Cargo.toml`：
 
 ```toml
 [package]
-name = "hl"
+name = "hlddz"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -43,20 +43,20 @@ rayon.workspace = true
 thiserror.workspace = true
 ```
 
-新建 `crates/hl/src/lib.rs`：
+新建 `crates/hlddz/src/lib.rs`：
 
 ```rust
 pub mod profile;
 pub mod recognition;
 
 pub use profile::profile;
-pub use recognition::HlRecognizer;
+pub use recognition::HlddzRecognizer;
 ```
 
 目录最终类似：
 
 ```text
-crates/hl/
+crates/hlddz/
   Cargo.toml
   src/
     lib.rs
@@ -73,7 +73,7 @@ crates/hl/
 
 ## 2. 写 GameProfile
 
-`src/profile.rs` 以 `jj/src/profile.rs` 为模板，核心是：
+`src/profile.rs` 以 `jjddz/src/profile.rs` 为模板，核心是：
 
 ```rust
 use std::collections::BTreeMap;
@@ -86,11 +86,11 @@ use tracking::{
 
 fn asset_root() -> PathBuf {
     if let Ok(root) = std::env::var("DECKTRACE_ASSETS") {
-        return root.join("hl");
+        return root.join("hlddz");
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(contents) = exe.parent().and_then(|macos| macos.parent()) {
-            let bundled = contents.join("Resources/assets/hl");
+            let bundled = contents.join("Resources/assets/hlddz");
             if bundled.join("templates").exists() {
                 return bundled;
             }
@@ -121,7 +121,7 @@ pub fn profile() -> GameProfile {
     ].into_iter().map(str::to_string).collect();
 
     GameProfile {
-        id: "hl".to_string(),
+        id: "hlddz".to_string(),
         name: "欢乐斗地主".to_string(),
         window: WindowSelector::new("欢乐斗地主"),
 
@@ -233,10 +233,10 @@ BJ.png SJ.png
 
 ## 4. 实现 Recognizer
 
-第一版最快方式：复制 `crates/jj/src/recognition.rs` 到
-`crates/hl/src/recognition.rs`，然后：
+第一版最快方式：复制 `crates/jjddz/src/recognition.rs` 到
+`crates/hlddz/src/recognition.rs`，然后：
 
-- `JjRecognizer` → `HlRecognizer`
+- `JjddzRecognizer` → `HlddzRecognizer`
 - 保留 `Scratch`、RLE 连通域、模板 IoU、NMS、大小王搜索
 - 调整 `masks()` 的红/黑阈值：
 
@@ -251,9 +251,9 @@ let is_dark = r < 90 && g < 90 && b < 90;
 最后实现 trait：
 
 ```rust
-impl Recognizer for HlRecognizer {
+impl Recognizer for HlddzRecognizer {
     fn recognize(&self, image: &RgbImage, detect_jokers: bool) -> RecognitionResult {
-        HlRecognizer::recognize(self, image, detect_jokers)
+        HlddzRecognizer::recognize(self, image, detect_jokers)
     }
 }
 ```
@@ -268,13 +268,13 @@ impl Recognizer for HlRecognizer {
 ```rust
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
     match id {
-        "jj" => {
-            let game = jj::profile();
+        "jjddz" => {
+            let game = jjddz::profile();
             game.validate()?;
             Ok(game)
         }
-        "hl" => {
-            let game = hl::profile();
+        "hlddz" => {
+            let game = hlddz::profile();
             game.validate()?;
             Ok(game)
         }
@@ -284,18 +284,18 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
 
 pub fn list_games() -> Vec<GameProfile> {
     vec![
-        jj::profile(),
-        hl::profile(),
+        jjddz::profile(),
+        hlddz::profile(),
     ]
 }
 
 pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String> {
     match game.id.as_str() {
-        "jj" => Ok(Arc::new(
-            jj::JjRecognizer::new(game).map_err(|e| e.to_string())?,
+        "jjddz" => Ok(Arc::new(
+            jjddz::JjddzRecognizer::new(game).map_err(|e| e.to_string())?,
         )),
-        "hl" => Ok(Arc::new(
-            hl::HlRecognizer::new(game).map_err(|e| e.to_string())?,
+        "hlddz" => Ok(Arc::new(
+            hlddz::HlddzRecognizer::new(game).map_err(|e| e.to_string())?,
         )),
         other => Err(format!("没有为游戏 {other} 注册识别器")),
     }
@@ -305,7 +305,7 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
 给 `crates/decktrace/Cargo.toml` 加：
 
 ```toml
-hl = { path = "../hl" }
+hlddz = { path = "../hlddz" }
 ```
 
 `main.rs` 不需要改：它通过 `list_games()` 自动检测窗口，通过
@@ -322,7 +322,7 @@ crates/*/assets
 规则：
 
 - 只有包含 `src/profile.rs` 的游戏 crate 才会被处理
-- crate 目录名必须等于 `GameProfile.id`，例如 `hl` 对应 `id = "hl"`
+- crate 目录名必须等于 `GameProfile.id`，例如 `hlddz` 对应 `id = "hlddz"`
 - 每个游戏单独拷到 `Contents/Resources/assets/<game>/`，不会互相覆盖
 - 如果目标目录重复，脚本会直接报错退出
 
@@ -332,19 +332,19 @@ crates/*/assets
 
 ```text
 Contents/Resources/assets/
-  jj/
-  hl/
+  jjddz/
+  hlddz/
 ```
 
-`asset_root()` 会按 `DECKTRACE_ASSETS/hl` → `.app/Contents/Resources/assets/hl`
+`asset_root()` 会按 `DECKTRACE_ASSETS/hlddz` → `.app/Contents/Resources/assets/hlddz`
 → 开发目录的顺序查找。
 
 ## 7. 测试
 
-新增 `crates/hl/tests/assets.rs`：
+新增 `crates/hlddz/tests/assets.rs`：
 
 ```rust
-use hl::profile;
+use hlddz::profile;
 
 #[test]
 fn assets_are_complete() {
@@ -361,10 +361,10 @@ fn assets_are_complete() {
 }
 ```
 
-再加真实截图回归，参照 `crates/jj/tests/golden.rs`：
+再加真实截图回归，参照 `crates/jjddz/tests/golden.rs`：
 
-- 截图放 `shots/hl/`
-- 使用 `HlRecognizer` 识别
+- 截图放 `shots/hlddz/`
+- 使用 `HlddzRecognizer` 识别
 - 断言检测到的牌集合和底牌集合
 
 运行：
@@ -372,7 +372,7 @@ fn assets_are_complete() {
 ```bash
 cargo test --release --workspace
 cargo run --release -p decktrace          # 自动检测
-cargo run --release -p decktrace -- --game hl
+cargo run --release -p decktrace -- --game hlddz
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 

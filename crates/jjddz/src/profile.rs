@@ -9,21 +9,21 @@ use tracking::{JokerBand, RecognitionConfig, ResetConfig, WindowSelector};
 fn asset_root() -> PathBuf {
     if let Ok(root) = std::env::var("DECKTRACE_ASSETS") {
         let path = PathBuf::from(root);
-        if path.join("jj/templates").exists() {
-            return path.join("jj");
+        if path.join("jjddz/templates").exists() {
+            return path.join("jjddz");
         }
         return path;
     }
     if let Ok(exe) = std::env::current_exe() {
-        // decktrace.app/Contents/MacOS/decktrace -> Contents/Resources/assets/jj
+        // decktrace.app/Contents/MacOS/decktrace -> Contents/Resources/assets/jjddz
         if let Some(contents) = exe.parent().and_then(|macos| macos.parent()) {
-            let bundled = contents.join("Resources/assets/jj");
+            let bundled = contents.join("Resources/assets/jjddz");
             if bundled.join("templates").exists() {
                 return bundled;
             }
         }
         if let Some(dir) = exe.parent() {
-            let adjacent = dir.join("assets/jj");
+            let adjacent = dir.join("assets/jjddz");
             if adjacent.join("templates").exists() {
                 return adjacent;
             }
@@ -108,7 +108,7 @@ pub fn profile() -> GameProfile {
     };
 
     GameProfile {
-        id: "jj".to_string(),
+        id: "jjddz".to_string(),
         name: "JJ斗地主".to_string(),
         window: WindowSelector::new("JJ斗地主"),
         templates_dir: assets.join("templates"),

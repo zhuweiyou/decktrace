@@ -1,4 +1,4 @@
-use jj::profile;
+use jjddz::profile;
 
 #[test]
 fn all_card_assets_and_templates_exist() {
