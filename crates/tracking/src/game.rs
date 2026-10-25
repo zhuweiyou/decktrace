@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::bottom::BottomSpec;
-use crate::{RecognitionConfig, ResetConfig, SUIT_SYMBOLS, WindowSelector};
+use crate::{RecognitionConfig, ResetConfig, WindowSelector};
 
 /// 一个游戏的完整接入描述：窗口、牌堆、模板、底牌策略、重置规则。
 #[derive(Clone)]
@@ -47,17 +47,6 @@ impl GameProfile {
             .into_iter()
             .filter(|id| !seen_ids.contains(id))
             .collect()
-    }
-
-    pub fn label(&self, rank: &str, suit: &str) -> String {
-        if let Some(label) = self.labels.get(rank) {
-            return label.clone();
-        }
-        if let Some((_, symbol)) = SUIT_SYMBOLS.iter().find(|(s, _)| *s == suit) {
-            format!("{rank}{symbol}")
-        } else {
-            rank.to_string()
-        }
     }
 
     pub fn validate(&self) -> Result<(), String> {

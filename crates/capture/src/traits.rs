@@ -34,7 +34,6 @@ pub trait CaptureStream: Send {
     fn start(&mut self) -> Result<()>;
     fn read(&mut self, timeout: Duration) -> Result<Option<RawFrame>>;
     fn stop(&mut self);
-    fn backend_name(&self) -> &str;
 }
 
 pub trait Platform: Send + Sync {
@@ -74,10 +73,10 @@ pub fn select_window(windows: &[WindowInfo], selector: &WindowSelector) -> Resul
         }
         let window_title = window.title.trim().to_lowercase();
         let window_app = window.app.trim().to_lowercase();
-        if let Some(app) = &app_key {
-            if !window_app.contains(app) {
-                continue;
-            }
+        if let Some(app) = &app_key
+            && !window_app.contains(app)
+        {
+            continue;
         }
         let score = if title_key.is_empty() {
             50.0
@@ -93,10 +92,10 @@ pub fn select_window(windows: &[WindowInfo], selector: &WindowSelector) -> Resul
             continue;
         };
         let mut score = score;
-        if let Some(app) = &app_key {
-            if &window_app == app {
-                score += 15.0;
-            }
+        if let Some(app) = &app_key
+            && &window_app == app
+        {
+            score += 15.0;
         }
         if window.onscreen {
             score += 5.0;

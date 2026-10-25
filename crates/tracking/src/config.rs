@@ -1,7 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 /// 大小王模板搜索的一条高度带。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct JokerBand {
     pub top_ratio: f32,
     pub bottom_ratio: f32,
@@ -10,7 +8,7 @@ pub struct JokerBand {
 }
 
 /// 模板识别的通用参数；具体数值由游戏 profile 提供。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct RecognitionConfig {
     pub rank_template_height: u32,
     pub reference_width: u32,
@@ -43,7 +41,7 @@ impl Default for RecognitionConfig {
 }
 
 /// 自动重置规则。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ResetConfig {
     pub hand_top_ratio: f32,
     pub hand_bottom_ratio: f32,

@@ -72,7 +72,6 @@ ScreenCaptureKit
 | `crossbeam-channel` 0.5 | 采集队列、GUI snapshot |
 | `clap` 4.6 | CLI 参数 |
 | `anyhow` / `thiserror` | 应用/模块错误 |
-| `serde` 1 | 模型/config 派生 |
 
 ## 扩展点
 

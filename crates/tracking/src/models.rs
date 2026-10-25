@@ -1,12 +1,10 @@
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
-
 pub type BBox = (u32, u32, u32, u32);
 
 pub const SUIT_SYMBOLS: &[(&str, &str)] = &[("H", "♥"), ("D", "♦"), ("S", "♠"), ("C", "♣")];
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Detection {
     pub rank: String,
     pub suit: String,
@@ -46,7 +44,7 @@ impl fmt::Display for Detection {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct WindowSelector {
     pub title: String,
     pub app: Option<String>,

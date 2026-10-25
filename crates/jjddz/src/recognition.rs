@@ -26,6 +26,8 @@ pub enum RecognitionError {
     Image(#[from] image::ImageError),
 }
 
+type ComponentStats = Option<(u32, u32, u32, u32, u32)>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Comp {
     x: u32,
@@ -537,7 +539,7 @@ fn components(mask: &GrayImage) -> Vec<Comp> {
         prev = current;
     }
 
-    let mut stats: Vec<Option<(u32, u32, u32, u32, u32)>> = vec![None; parent.len()];
+    let mut stats: Vec<ComponentStats> = vec![None; parent.len()];
     for (y, runs) in rows.iter().enumerate() {
         for run in runs {
             let root = find(&mut parent, run.label);

@@ -105,7 +105,7 @@ impl SCStreamOutputTrait for FrameHandler {
         };
         let width = guard.width() as u32;
         let height = guard.height() as u32;
-        let bytes_per_row = guard.bytes_per_row() as usize;
+        let bytes_per_row = guard.bytes_per_row();
         let Some(slice) = (unsafe { guard.as_slice() }) else {
             return;
         };
@@ -217,10 +217,6 @@ impl CaptureStream for SckCaptureStream {
             self.started = false;
         }
     }
-
-    fn backend_name(&self) -> &str {
-        "screencapturekit"
-    }
 }
 
 impl Drop for SckCaptureStream {
@@ -244,10 +240,10 @@ fn bgra_to_rgb(slice: &[u8], width: u32, height: u32, bytes_per_row: usize) -> O
         }
         let src = &slice[start..end];
         let dst = &mut data[row * width as usize * 3..(row + 1) * width as usize * 3];
-        for (dst_px, src_px) in dst.chunks_exact_mut(3).zip(src.chunks_exact(4)) {
-            dst_px[0] = src_px[2];
-            dst_px[1] = src_px[1];
-            dst_px[2] = src_px[0];
+        let (dst_pixels, _) = dst.as_chunks_mut::<3>();
+        let (src_pixels, _) = src.as_chunks::<4>();
+        for (dst_px, src_px) in dst_pixels.iter_mut().zip(src_pixels) {
+            *dst_px = [src_px[2], src_px[1], src_px[0]];
         }
     }
     RgbImage::from_raw(width, height, data)

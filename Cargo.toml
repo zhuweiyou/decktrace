@@ -18,7 +18,6 @@ rust-version = "1.88"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "rayon"] }
 imageproc = { version = "0.27", default-features = false, features = ["rayon"] }
 rayon = "1.10"
-serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4.6", features = ["derive"] }

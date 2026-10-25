@@ -1,7 +1,7 @@
 use jjddz::profile;
 
 #[test]
-fn all_card_assets_and_templates_exist() {
+fn templates_exist() {
     let game = profile();
     game.validate().expect("valid profile");
 

@@ -139,10 +139,7 @@ pub struct Session {
     auto_reset: AutoReset,
     stream: Box<dyn CaptureStream>,
     started: Instant,
-    frames: u64,
     frame_no: u64,
-    errors: u64,
-    last_recognition_ms: f64,
 }
 
 impl Session {
@@ -168,10 +165,7 @@ impl Session {
             auto_reset: AutoReset::new(config.auto_reset),
             stream,
             started: Instant::now(),
-            frames: 0,
             frame_no: 0,
-            errors: 0,
-            last_recognition_ms: 0.0,
         })
     }
 
@@ -185,19 +179,16 @@ impl Session {
         let frame = match self.stream.read(timeout) {
             Ok(frame) => frame,
             Err(err) => {
-                self.errors += 1;
                 return Err(err.into());
             }
         };
         let Some(frame) = frame else {
             return Ok(None);
         };
-        self.frames += 1;
         self.frame_no += 1;
         let now = self.started.elapsed().as_secs_f64();
-        let detect_jokers = self.frame_no % 2 == 0 && !self.tracker.jokers_known();
+        let detect_jokers = self.frame_no.is_multiple_of(2) && !self.tracker.jokers_known();
         let result = self.recognizer.recognize(&frame.image, detect_jokers);
-        self.last_recognition_ms = result.elapsed_ms;
         self.auto_reset.maybe_reset(
             &mut self.tracker,
             self.game.as_ref(),
@@ -215,38 +206,6 @@ impl Session {
 
     pub fn snapshot(&self) -> TrackerSnapshot {
         self.tracker.snapshot()
-    }
-
-    pub fn game(&self) -> &GameProfile {
-        self.game.as_ref()
-    }
-
-    pub fn auto_reset_count(&self) -> usize {
-        self.auto_reset.resets
-    }
-
-    pub fn errors(&self) -> u64 {
-        self.errors
-    }
-
-    pub fn recognition_ms(&self) -> f64 {
-        self.last_recognition_ms
-    }
-
-    pub fn status(&self) -> String {
-        let elapsed = self.started.elapsed().as_secs_f64().max(1e-6);
-        format!(
-            "{:.1}fps · 识别 {:.0}ms · 错 {} · 重置 {} · {}",
-            self.frames as f64 / elapsed,
-            self.last_recognition_ms,
-            self.errors,
-            self.auto_reset.resets,
-            self.stream.backend_name()
-        )
-    }
-
-    pub fn backend_name(&self) -> &str {
-        self.stream.backend_name()
     }
 
     pub fn stop(&mut self) {
