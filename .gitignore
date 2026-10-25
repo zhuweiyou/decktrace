@@ -9,3 +9,6 @@ shots/
 # 日志与系统文件
 *.log
 .DS_Store
+
+# 开发取样截图
+samples/
