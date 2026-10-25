@@ -79,3 +79,41 @@ fn hand_of_late_round_matches_expectation() {
     .collect();
     assert_eq!(hand_ids(&result), expected);
 }
+
+#[test]
+fn joker_in_hand_is_recognized() {
+    // 大王：竖排红色 JOKER 字样，牌局 13/10 阶段
+    let Some(result) = recognize("frame_000519.png") else {
+        return;
+    };
+    let ids: BTreeSet<String> = result.detections.iter().map(|det| det.card_id()).collect();
+    assert!(ids.contains("BJ"), "手牌大王未识别");
+}
+
+#[test]
+fn played_joker_is_recognized() {
+    // 单机模式：张三打出的小王（黑色 JOKER）
+    let Some(result) = recognize("frame_000265.png") else {
+        return;
+    };
+    let ids: BTreeSet<String> = result.detections.iter().map(|det| det.card_id()).collect();
+    assert!(ids.contains("SJ"), "出牌区小王未识别");
+}
+
+#[test]
+fn bottom_cards_are_marked() {
+    // 地主决出后顶部亮出 Q♥ J♥ 8♠
+    let Some(result) = recognize("frame_000556.png") else {
+        return;
+    };
+    let bottoms: BTreeSet<String> = result
+        .detections
+        .iter()
+        .filter(|det| det.is_bottom)
+        .map(|det| det.card_id())
+        .collect();
+    assert_eq!(
+        bottoms,
+        ["QH", "JH", "8S"].into_iter().map(str::to_string).collect()
+    );
+}

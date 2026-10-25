@@ -114,14 +114,22 @@ impl HlddzRecognizer {
         let (mut kept, jokers) = rayon::join(
             || self.detect_cards(image, &red, &dark),
             || {
-                if detect_jokers {
-                    self.detect_jokers(image, &combined, &red, &dark)
+                if !detect_jokers {
+                    return Vec::new();
+                }
+                if self.joker_templates.is_empty() {
+                    // 欢乐斗地主没有“王”字：大小王是竖排 JOKER 字样，
+                    // 用竖排字形聚类识别，红色=大王、黑色=小王。
+                    self.detect_jokers_vertical(image, &red, &dark)
                 } else {
-                    Vec::new()
+                    self.detect_jokers(image, &combined, &red, &dark)
                 }
             },
         );
         kept.extend(jokers);
+        // 欢乐斗地主的底牌会以半透明样式常驻牌桌顶部：已出的牌字形变粉/变灰，
+        // 普通红黑掩码抓不到，单独走低对比度通路。
+        kept.extend(self.detect_bottom_cards(image));
         if timing {
             eprintln!(
                 "[timing] masks={:.0}ms total={:.0}ms",
@@ -222,6 +230,297 @@ impl HlddzRecognizer {
             });
         }
         raw
+    }
+
+    /// 识别牌桌顶部的三张底牌（含已打出后的半透明样式）。
+    /// 只在顶部小卡片区域工作，尺寸由亮列/亮行剖面确定，不依赖固定坐标。
+    fn detect_bottom_cards(&self, image: &RgbImage) -> Vec<Detection> {
+        let (width, height) = image.dimensions();
+        let bx0 = (width as f32 * 0.42) as u32;
+        let bx1 = ((width as f32 * 0.72) as u32).min(width);
+        let by0 = (height as f32 * 0.083) as u32;
+        let by1 = ((height as f32 * 0.20) as u32).min(height);
+        if bx1 <= bx0 + 90 || by1 <= by0 + 40 {
+            return Vec::new();
+        }
+        let bright = |r: u8, g: u8, b: u8| r.min(g).min(b) > 165;
+
+        // 亮列剖面 → 三张牌连成的横向区间。
+        let mut col = vec![0u32; (bx1 - bx0) as usize];
+        for y in by0..by1 {
+            for x in bx0..bx1 {
+                let [r, g, b] = image.get_pixel(x, y).0;
+                if bright(r, g, b) {
+                    col[(x - bx0) as usize] += 1;
+                }
+            }
+        }
+        let need = ((by1 - by0) as f32 * 0.25) as u32;
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        let mut start: Option<u32> = None;
+        for (index, &count) in col.iter().enumerate() {
+            let hit = count >= need;
+            if hit && start.is_none() {
+                start = Some(index as u32);
+            } else if !hit && start.is_some() {
+                let from = start.take().unwrap();
+                if index as u32 - from >= 100 {
+                    runs.push((from, index as u32));
+                }
+            }
+        }
+        if let Some(from) = start
+            && col.len() as u32 - from >= 100
+        {
+            runs.push((from, col.len() as u32));
+        }
+        let Some((run_x0, run_x1)) = runs
+            .into_iter()
+            .find(|(a, b)| (100..=210).contains(&(b - a)))
+        else {
+            return Vec::new();
+        };
+
+        // 亮行剖面 → 卡片纵向范围。
+        let mut rows = vec![0u32; (by1 - by0) as usize];
+        for y in by0..by1 {
+            for x in (bx0 + run_x0)..(bx0 + run_x1) {
+                let [r, g, b] = image.get_pixel(x, y).0;
+                if bright(r, g, b) {
+                    rows[(y - by0) as usize] += 1;
+                }
+            }
+        }
+        let row_need = ((run_x1 - run_x0) as f32 * 0.6) as u32;
+        let (Some(top), Some(bottom)) = (
+            rows.iter().position(|&count| count >= row_need),
+            rows.iter().rposition(|&count| count >= row_need),
+        ) else {
+            return Vec::new();
+        };
+        let (y0, y1) = (by0 + top as u32, by0 + bottom as u32 + 1);
+
+        // 三张等宽卡片，逐张做低对比度二值化。
+        let slot_w = (run_x1 - run_x0) / 3;
+        let mut found = Vec::new();
+        for slot in 0..3 {
+            let sx0 = bx0 + run_x0 + slot * slot_w + 3;
+            let sx1 = bx0 + run_x0 + (slot + 1) * slot_w - 3;
+            let sy0 = y0 + 3;
+            let sy1 = y1.saturating_sub(3);
+            let (cw, ch) = (sx1.saturating_sub(sx0), sy1.saturating_sub(sy0));
+            if cw < 20 || ch < 40 || sx1 > width || sy1 > height {
+                continue;
+            }
+            // 每张牌按自身亮度分布定阈值：白卡面作背景，字形偏暗或带色偏。
+            let mut lumas = Vec::with_capacity((cw * ch) as usize);
+            let mut chromas = Vec::with_capacity((cw * ch) as usize);
+            for y in 0..ch {
+                for x in 0..cw {
+                    let [r, g, b] = image.get_pixel(sx0 + x, sy0 + y).0;
+                    lumas.push((u32::from(r) + u32::from(g) + u32::from(b)) / 3);
+                    chromas.push(u32::from(r.max(g).max(b)) - u32::from(r.min(g).min(b)));
+                }
+            }
+            let mut sorted = lumas.clone();
+            sorted.sort_unstable();
+            let bg = sorted[(sorted.len() * 9 / 10).min(sorted.len() - 1)];
+            let fg = sorted[sorted.len() / 20];
+            if bg.saturating_sub(fg) < 15 {
+                continue;
+            }
+            let mut mask = GrayImage::new(cw, ch);
+            for y in 0..ch {
+                for x in 0..cw {
+                    let index = (y * cw + x) as usize;
+                    let luma = lumas[index];
+                    let chroma = chromas[index];
+                    let glyph = luma + 22 < bg || (chroma >= 14 && luma + 6 < bg);
+                    mask.put_pixel(x, y, Luma([if glyph { 255 } else { 0 }]));
+                }
+            }
+            let comps: Vec<Comp> = components(&mask)
+                .into_iter()
+                .filter(|c| {
+                    c.area >= 18
+                        && c.w >= 4
+                        && c.h >= 6
+                        && c.w <= (cw as f32 * 0.9) as u32
+                        && c.h <= (ch as f32 * 0.65) as u32
+                })
+                .collect();
+            if comps.is_empty() {
+                continue;
+            }
+
+            let rank_y = (ch as f32 * 0.55) as u32;
+            let rank_comps: Vec<Comp> = comps
+                .iter()
+                .filter(|c| c.y + c.h / 2 <= rank_y)
+                .copied()
+                .collect();
+            if rank_comps.is_empty() {
+                continue;
+            }
+            let rx0 = rank_comps.iter().map(|c| c.x).min().unwrap();
+            let ry0 = rank_comps.iter().map(|c| c.y).min().unwrap();
+            let rx1 = rank_comps.iter().map(|c| c.x + c.w).max().unwrap();
+            let ry1 = rank_comps.iter().map(|c| c.y + c.h).max().unwrap();
+            let rank_crop = crop(&mask, rx0, ry0, rx1 - rx0, ry1 - ry0);
+            let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
+            if rank_score < 0.55 || rank_score - second_score < 0.05 {
+                continue;
+            }
+
+            // 花色：在点数下方找得分最高的候选，红/黑两套都试。
+            let suit_y = (ch as f32 * 0.45) as u32;
+            let mut best_suit = (String::new(), 0.0f32, 0u32, 0u32, 0u32, 0u32);
+            for c in comps.iter().filter(|c| c.y + c.h / 2 >= suit_y) {
+                let aspect = c.w as f32 / c.h.max(1) as f32;
+                if !(0.45..=1.8).contains(&aspect) {
+                    continue;
+                }
+                let suit_crop = crop(&mask, c.x, c.y, c.w, c.h);
+                for color in ["red", "black"] {
+                    let (name, score) = self.classify_suit(&suit_crop, color);
+                    if score > best_suit.1 {
+                        best_suit = (name, score, c.x, c.y, c.w, c.h);
+                    }
+                }
+            }
+            if best_suit.0.is_empty() || best_suit.1 < 0.55 {
+                continue;
+            }
+
+            found.push(Detection {
+                rank: rank.clone(),
+                suit: best_suit.0.clone(),
+                score: rank_score * 0.6 + best_suit.1 * 0.4,
+                bbox: (
+                    sx0 + best_suit.2,
+                    sy0 + best_suit.3,
+                    best_suit.4,
+                    best_suit.5,
+                ),
+                rank_score,
+                suit_score: best_suit.1,
+                face_score: 1.0,
+                display: self.label(&rank, &best_suit.0),
+                is_bottom: true,
+            });
+        }
+        found
+    }
+
+    /// 竖排 JOKER 字形识别：五个旋转字母在同一竖列上，红色为大王，黑色为小王。
+    fn detect_jokers_vertical(
+        &self,
+        image: &RgbImage,
+        red: &GrayImage,
+        dark: &GrayImage,
+    ) -> Vec<Detection> {
+        let mut letters: Vec<(Comp, bool)> = Vec::new();
+        for (mask, is_red) in [(red, true), (dark, false)] {
+            for comp in components(mask) {
+                // 竖排字母是窄小方块；牌面小丑插画会被红色掩码带进来，按尺寸剔掉。
+                if !(8..=46).contains(&comp.w) || !(8..=46).contains(&comp.h) {
+                    continue;
+                }
+                if !(40..=1600).contains(&comp.area) {
+                    continue;
+                }
+                letters.push((comp, is_red));
+            }
+        }
+        if letters.len() < 4 {
+            return Vec::new();
+        }
+        letters.sort_by_key(|(comp, _)| comp.x);
+
+        // 按 x 重合聚成竖列，再在列内按 y 找连续字母串。
+        let mut columns: Vec<Vec<(Comp, bool)>> = Vec::new();
+        for item in letters {
+            let (comp, _) = &item;
+            let placed = columns.iter_mut().find(|column| {
+                let min_x = column.iter().map(|(c, _)| c.x).min().unwrap();
+                let max_x = column.iter().map(|(c, _)| c.x + c.w).max().unwrap();
+                let overlap = (comp.x + comp.w).min(max_x).saturating_sub(comp.x.max(min_x));
+                overlap * 2 >= comp.w.min(max_x - min_x)
+            });
+            match placed {
+                Some(column) => column.push(item),
+                None => columns.push(vec![item]),
+            }
+        }
+
+        let mut found = Vec::new();
+        for mut column in columns {
+            column.sort_by_key(|(comp, _)| comp.y);
+            let mut run: Vec<(Comp, bool)> = Vec::new();
+            for item in column {
+                let (comp, _) = &item;
+                let gap = run
+                    .last()
+                    .map(|(last, _)| comp.y.saturating_sub(last.y + last.h))
+                    .unwrap_or(0);
+                if !run.is_empty() && gap > (comp.h as f32 * 1.2) as u32 + 8 {
+                    if let Some(det) = self.joker_from_run(image, red, dark, &run) {
+                        found.push(det);
+                    }
+                    run.clear();
+                }
+                run.push(item);
+            }
+            if let Some(det) = self.joker_from_run(image, red, dark, &run) {
+                found.push(det);
+            }
+        }
+        found
+    }
+
+    fn joker_from_run(
+        &self,
+        image: &RgbImage,
+        red: &GrayImage,
+        dark: &GrayImage,
+        run: &[(Comp, bool)],
+    ) -> Option<Detection> {
+        if run.len() < 4 {
+            return None;
+        }
+        let x0 = run.iter().map(|(c, _)| c.x).min()?;
+        let y0 = run.iter().map(|(c, _)| c.y).min()?;
+        let x1 = run.iter().map(|(c, _)| c.x + c.w).max()?;
+        let y1 = run.iter().map(|(c, _)| c.y + c.h).max()?;
+        let (w, h) = (x1 - x0, y1 - y0);
+        if !(100..=420).contains(&h) || w < 12 || w > 60 {
+            return None;
+        }
+        // 标题栏在这个高度以上，真正的王只出现在手牌或出牌区。
+        if y0 < (image.height() as f32 * 0.06) as u32 {
+            return None;
+        }
+        let red_pixels = count_nonzero(red, x0, y0, w, h);
+        let dark_pixels = count_nonzero(dark, x0, y0, w, h);
+        if red_pixels.max(dark_pixels) < 200 {
+            return None;
+        }
+        let face = face_fraction(image, x0, y0, w, h);
+        if face < self.cfg.face_min_fraction {
+            return None;
+        }
+        let rank = if red_pixels > dark_pixels { "BJ" } else { "SJ" };
+        Some(Detection {
+            rank: rank.to_string(),
+            suit: String::new(),
+            score: 0.9,
+            bbox: (x0, y0, w, h),
+            rank_score: 0.9,
+            suit_score: 1.0,
+            face_score: face,
+            display: self.label(rank, ""),
+            is_bottom: false,
+        })
     }
 
     fn label(&self, rank: &str, suit: &str) -> String {
@@ -447,7 +746,9 @@ fn masks(
         .zip(image.as_raw().par_chunks_exact(3))
         .for_each(|(((red_px, dark_px), combined_px), rgb)| {
             let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
-            let is_red = r > 110 && (r as i32 - g as i32) > 45 && (r as i32 - b as i32) > 35;
+            // 托管/暗态下手牌整体压暗，红色会掉饱和度；阈值放宽到 30/25，
+            // 靠点数+花色+卡面三重校验过滤误检。
+            let is_red = r > 100 && (r as i32 - g as i32) > 30 && (r as i32 - b as i32) > 25;
             let is_dark = r < 90 && g < 90 && b < 90;
             *red_px = if is_red { 255 } else { 0 };
             *dark_px = if is_dark { 255 } else { 0 };
@@ -692,7 +993,7 @@ fn face_fraction(image: &RgbImage, x: u32, y: u32, w: u32, h: u32) -> f32 {
             let [r, g, b] = image.get_pixel(px, py).0;
             let mx = r.max(g).max(b);
             let mn = r.min(g).min(b);
-            if mx > 150 && (mx as i32 - mn as i32) < 35 {
+            if mx > 120 && (mx as i32 - mn as i32) < 40 {
                 okay += 1;
             }
             total += 1;
