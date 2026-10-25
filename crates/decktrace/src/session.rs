@@ -239,13 +239,15 @@ impl Session {
         let now = self.started.elapsed().as_secs_f64();
 
         // 牌桌大部分时间是静止的；画面几乎没变就跳过整帧识别，省 CPU。
+        // 但没 arm 之前必须每帧都看：底牌出现前/动画、首帧不完整都可能让开
+        // 局条件错过，跳过会一直停在 54 张。
         let thumb = frame_thumb(&frame.image);
         let moved = self
             .last_thumb
             .as_ref()
             .is_none_or(|prev| mean_abs_diff(prev, &thumb) >= STATIC_DIFF);
         self.last_thumb = Some(thumb);
-        if !moved && self.static_frames >= 3 {
+        if self.tracker.armed() && !moved && self.static_frames >= 3 {
             self.static_frames = self.static_frames.saturating_add(1);
             return Ok(None);
         }
