@@ -14,6 +14,8 @@
 | GUI 资源找不到 | 只拷贝了二进制，没拷贝 assets | 用 `cargo xtask package-macos` |
 | 打包报重复游戏资源 | 两个游戏映射到同一目标目录 | 检查 crate 目录名是否等于 `GameProfile.id` |
 | 游戏一直等待窗口 | 窗口标题/owner 不匹配 | 检查 `WindowSelector`，临时用 `--game <id>` 调试 |
+| Windows 抓到黑屏 | PrintWindow/BitBlt 不支持硬件加速窗口 | 先让窗口前台可见；后续接 Windows Graphics Capture |
+| Windows 冒烟无法运行 | Wine 对 x86_64 PE/版本兼容性问题 | 在真实 Windows 或 Windows CI 上跑 `windows-smoke` |
 
 ## 常用命令
 

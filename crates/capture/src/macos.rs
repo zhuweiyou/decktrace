@@ -70,7 +70,7 @@ impl WindowService for MacWindowService {
                 .unwrap_or(0);
             let frame = window.frame();
             windows.push(WindowInfo {
-                id: window.window_id(),
+                id: u64::from(window.window_id()),
                 title,
                 app,
                 pid,
@@ -147,7 +147,7 @@ impl SckCaptureStream {
         let windows = content.windows();
         let live = windows
             .iter()
-            .find(|candidate| candidate.window_id() == window.id)
+            .find(|candidate| u64::from(candidate.window_id()) == window.id)
             .ok_or_else(|| CaptureError::Window(format!("窗口已关闭：{}", window.id)))?;
         let filter = SCContentFilter::create()
             .with_window(live)

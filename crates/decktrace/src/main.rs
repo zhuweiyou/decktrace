@@ -29,7 +29,7 @@ struct Args {
     #[arg(long)]
     owner: Option<String>,
     #[arg(long)]
-    window_id: Option<u32>,
+    window_id: Option<u64>,
     #[arg(long, default_value_t = 2)]
     min_hits: usize,
     #[arg(long, default_value_t = 15.0)]

@@ -7,6 +7,7 @@ crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer 契约、CardTracker
   jjddz/       # JJ斗地主适配：profile、识别模板、识别实现
   capture/     # 采集契约 + WindowInfo/RawFrame + macOS/Windows cfg 实现
+              # Windows 为实验 GDI 实现
   decktrace/   # GUI + Session + registry，唯一发布产物
 xtask/         # 开发任务：cargo xtask package-macos
 ```

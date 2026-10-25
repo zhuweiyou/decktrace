@@ -48,7 +48,7 @@ impl fmt::Display for Detection {
 pub struct WindowSelector {
     pub title: String,
     pub app: Option<String>,
-    pub window_id: Option<u32>,
+    pub window_id: Option<u64>,
     pub include_off_screen: bool,
     pub min_width: f64,
     pub min_height: f64,

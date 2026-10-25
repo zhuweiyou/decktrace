@@ -4,7 +4,7 @@ use image::RgbImage;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct WindowInfo {
-    pub id: u32,
+    pub id: u64,
     pub title: String,
     pub app: String,
     pub pid: i32,
