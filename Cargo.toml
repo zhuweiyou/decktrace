@@ -24,3 +24,8 @@ clap = { version = "4.6", features = ["derive"] }
 crossbeam-channel = "0.5"
 screencapturekit = "11.1"
 eframe = "0.37"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

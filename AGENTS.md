@@ -36,7 +36,6 @@ crates/
   decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
-start-gui.sh                  # 打包并启动
 docs/adding-a-game.md         # 新游戏接入指南
 ```
 
@@ -108,8 +107,9 @@ ScreenCaptureKit
 cargo test --release --workspace
 cargo run --release -p decktrace          # 自动检测游戏窗口
 cargo run --release -p decktrace -- --game jj  # 调试时强制指定
-./start-gui.sh                 # 打包并打开 dist/decktrace.app
-./scripts/bundle-macos.sh      # 只打包
+cargo build --release -p decktrace        # 只编译
+./scripts/bundle-macos.sh                 # 生成 dist/decktrace.app
+open dist/decktrace.app                   # 运行打包产物
 ```
 
 无窗口时程序会显示等待并每 500ms 重试，这是预期行为。
@@ -197,7 +197,9 @@ cargo test --release --workspace
 手工验收：
 
 ```bash
-./start-gui.sh
+cargo run --release -p decktrace
+# 或
+./scripts/bundle-macos.sh && open dist/decktrace.app
 ```
 
 检查：

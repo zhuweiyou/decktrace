@@ -10,7 +10,12 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 
 cp "$ROOT/target/release/decktrace" "$APP/Contents/MacOS/decktrace"
-cp -R "$ROOT/crates/decktrace-jj/assets" "$APP/Contents/Resources/assets/jj"
+for game_dir in "$ROOT"/crates/decktrace-*/assets; do
+    [ -d "$game_dir" ] || continue
+    game="$(basename "$(dirname "$game_dir")")"
+    game="${game#decktrace-}"
+    cp -R "$game_dir" "$APP/Contents/Resources/assets/$game"
+done
 cp "$ROOT/crates/decktrace/assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 VERSION="$(cargo pkgid -p decktrace 2>/dev/null | sed 's/.*#//')"
