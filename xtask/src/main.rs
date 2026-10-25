@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 
@@ -11,30 +12,149 @@ fn main() -> Result<()> {
     let command = args.next();
     match command.as_deref() {
         Some("package-macos") => {
-            let mut sign = std::env::var("DECKTRACE_SIGN_IDENTITY").ok();
+            let sign = parse_sign(&mut args)?;
+            package_macos(sign.as_deref())
+        }
+        Some("install-macos") => {
+            let mut sign = None;
+            let mut open = true;
             while let Some(arg) = args.next() {
                 match arg.as_str() {
-                    "--sign" => {
-                        sign = Some(args.next().context("--sign 后面缺证书名称")?);
-                    }
+                    "--sign" => sign = Some(args.next().context("--sign 后面缺证书名称")?),
+                    "--no-open" => open = false,
                     other => bail!("未知参数：{other}"),
                 }
             }
-            package_macos(sign.as_deref())
+            package_macos(sign.as_deref())?;
+            install_macos(open)
         }
+        Some("icon") => regenerate_icon(),
         Some("help") | None => {
             println!(
-                "用法：cargo xtask package-macos [--sign <证书名>]\n\
-                 \n\
-                 不传 --sign 时用 ad-hoc 签名；ad-hoc 每次构建签名都会变，\n\
-                 macOS 会把它当成新应用，屏幕录制权限需要重新授权。\n\
-                 用固定的自签名证书可以避免反复授权。"
+                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。"
             );
             Ok(())
         }
-        Some(other) => bail!("未知 xtask：{other}（可用：package-macos）"),
+        Some(other) => bail!("未知 xtask：{other}（可用：package-macos / install-macos / icon）"),
     }
 }
+
+fn parse_sign(args: &mut std::iter::Skip<std::env::Args>) -> Result<Option<String>> {
+    let mut sign = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--sign" => sign = Some(args.next().context("--sign 后面缺证书名称")?),
+            other => bail!("未知参数：{other}"),
+        }
+    }
+    Ok(sign)
+}
+
+/// 本机装了固定自签名证书就默认用它，TCC 授权才能跨构建保留。
+fn default_sign_identity() -> Option<String> {
+    if let Ok(identity) = std::env::var("DECKTRACE_SIGN_IDENTITY") {
+        if !identity.trim().is_empty() {
+            return Some(identity);
+        }
+    }
+    let output = Command::new("security")
+        .args(["find-identity", "-v", "-p", "codesigning"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    if text.contains("\"decktrace-dev\"") {
+        return Some("decktrace-dev".to_string());
+    }
+    None
+}
+
+fn install_macos(should_open: bool) -> Result<()> {
+    if !cfg!(target_os = "macos") {
+        bail!("install-macos 只能在 macOS 上运行");
+    }
+    let app = workspace_root().join("dist").join(APP_BUNDLE);
+    if !app.is_dir() {
+        bail!("找不到打包产物：{}", app.display());
+    }
+    let dest = std::path::Path::new("/Applications").join(APP_BUNDLE);
+
+    // 先退出运行中的实例，否则替换会失败；顺手清掉旧的英文名安装。
+    let _ = Command::new("pkill")
+        .args(["-f", "decktrace.app|斗地主记牌器.app"])
+        .status();
+    std::thread::sleep(Duration::from_millis(600));
+    for stale in [dest.as_path(), Path::new("/Applications/decktrace.app")] {
+        if stale.exists() {
+            fs::remove_dir_all(stale)
+                .with_context(|| format!("删除旧安装失败：{}", stale.display()))?;
+        }
+    }
+    run(Command::new("ditto").arg(&app).arg(&dest))?;
+    run(Command::new("codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(&dest))?;
+    if should_open {
+        run(Command::new("open").arg(&dest))?;
+    }
+    println!("{}", dest.display());
+    Ok(())
+}
+
+/// 从 assets/AppIcon.png 重新生成 AppIcon.icns 与 AppIcon128.png。
+fn regenerate_icon() -> Result<()> {
+    if !cfg!(target_os = "macos") {
+        bail!("icon 依赖 macOS 的 sips/iconutil");
+    }
+    let root = workspace_root();
+    let source = root.join("crates/decktrace/assets/AppIcon.png");
+    if !source.is_file() {
+        bail!("缺少源图标：{}", source.display());
+    }
+    let iconset = root.join("target/AppIcon.iconset");
+    if iconset.exists() {
+        fs::remove_dir_all(&iconset)?;
+    }
+    fs::create_dir_all(&iconset)?;
+    let entries = [
+        (16u32, 16u32),
+        (32, 16),
+        (32, 32),
+        (64, 32),
+        (128, 128),
+        (256, 128),
+        (256, 256),
+        (512, 256),
+        (512, 512),
+        (1024, 512),
+    ];
+    for (pixels, base) in entries {
+        let name = if pixels == base {
+            format!("icon_{base}x{base}.png")
+        } else {
+            format!("icon_{base}x{base}@2x.png")
+        };
+        run(Command::new("sips")
+            .args(["-z", &pixels.to_string(), &pixels.to_string()])
+            .arg(&source)
+            .arg("--out")
+            .arg(iconset.join(&name)))?;
+    }
+    run(Command::new("iconutil")
+        .args(["-c", "icns"])
+        .arg(&iconset)
+        .arg("-o")
+        .arg(root.join("crates/decktrace/assets/AppIcon.icns")))?;
+    run(Command::new("sips")
+        .args(["-z", "128", "128"])
+        .arg(&source)
+        .arg("--out")
+        .arg(root.join("crates/decktrace/assets/AppIcon128.png")))?;
+    println!("已从 AppIcon.png 重新生成 AppIcon.icns / AppIcon128.png");
+    Ok(())
+}
+
+/// 打包产物与安装后的应用名。Finder 里显示的就是这个文件名。
+const APP_BUNDLE: &str = "斗地主记牌器.app";
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -68,7 +188,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
         .current_dir(&root))?;
 
     let version = package_version(&root)?;
-    let app = root.join("dist/decktrace.app");
+    let app = root.join("dist").join(APP_BUNDLE);
     if app.exists() {
         fs::remove_dir_all(&app).with_context(|| format!("删除旧产物失败：{}", app.display()))?;
     }
@@ -129,19 +249,26 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
     }
     copy_dir(&app_cards, &assets_root.join("cards"))?;
 
-    fs::write(resources.join("Info.plist"), info_plist(&version))
+    fs::write(app.join("Contents/Info.plist"), info_plist(&version))
         .context("写入 Info.plist 失败")?;
     fs::write(app.join("Contents/PkgInfo"), "APPL????").context("写入 PkgInfo 失败")?;
 
     // 自定义证书签名时 TCC 身份稳定，重建后不用重新授权；否则退回 ad-hoc。
-    let identity = sign_identity.unwrap_or("-");
+    let identity = sign_identity
+        .map(str::to_string)
+        .or_else(default_sign_identity)
+        .unwrap_or_else(|| "-".to_string());
+    let identity = identity.as_str();
     let status = Command::new("codesign")
         .args(["--force", "--deep", "--sign", identity])
         .arg(&app)
         .status();
     if !status.map(|status| status.success()).unwrap_or(false) {
-        eprintln!("警告：codesign 失败（{identity}），产物仍已生成");
+        bail!("codesign 失败（{identity}）");
     }
+    run(Command::new("codesign")
+        .args(["--verify", "--deep", "--strict"])
+        .arg(&app))?;
 
     println!("{}", app.display());
     Ok(())
@@ -193,7 +320,7 @@ fn info_plist(version: &str) -> String {
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>decktrace</string>
+    <string>斗地主记牌器</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleDisplayName</key>

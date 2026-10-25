@@ -6,10 +6,11 @@
 crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer 契约、CardTracker
   jjddz/       # JJ斗地主适配：profile、识别模板、识别实现
+  hlddz/       # 欢乐斗地主适配：profile、识别模板、识别实现
   capture/     # 采集契约 + WindowInfo/RawFrame + macOS/Windows cfg 实现
               # Windows 为实验 GDI 实现
   decktrace/   # GUI + Session + registry，唯一发布产物
-xtask/         # 开发任务：cargo xtask package-macos
+xtask/         # 开发任务：package-macos / install-macos / icon
 ```
 
 依赖方向：
@@ -18,12 +19,13 @@ xtask/         # 开发任务：cargo xtask package-macos
 tracking
   ↑        ↑         ↑
 jjddz   capture   decktrace（应用层）
+hlddz
 ```
 
 规则：
 
 - `tracking` 不依赖 OS、UI、具体游戏。
-- `jjddz` 只依赖 `tracking`，实现该游戏的 `Recognizer`。
+- 每个游戏 crate 只依赖 `tracking`，实现自己的 `Recognizer`。
 - GUI 牌面 `cards/` 属于应用层 `crates/decktrace/assets/cards`，不属于游戏。
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg` 和 target-specific dependencies。
 - `decktrace` 是组合根，注入具体游戏识别器和平台实现。
@@ -49,7 +51,7 @@ ScreenCaptureKit
 - **ScreenCaptureKit 回调**：只负责把帧放入有界队列。
 - 识别消费最新帧；队列满时丢旧帧，不让采集被识别拖慢。
 - GUI snapshot 通道 `bounded(1)`，新快照覆盖旧快照。
-- 默认采集 15 FPS，GUI 每 80ms 重绘。
+- 默认采集 10 FPS；画面几乎静止时跳过识别，GUI 每 80ms 重绘。
 
 ## 自动检测游戏
 

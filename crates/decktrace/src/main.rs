@@ -70,6 +70,9 @@ fn main() -> Result<()> {
     if let Some(pos) = window_state::load() {
         viewport = viewport.with_position(pos);
     }
+    if let Some(icon) = app_icon() {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
         viewport,
         ..Default::default()
@@ -479,4 +482,15 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
 
 fn create_platform() -> Result<Box<dyn Platform>> {
     Ok(capture::create_platform()?)
+}
+
+/// 开发期直接 `cargo run` 时也给 Dock 一个图标；打包后以 bundle 图标为准。
+fn app_icon() -> Option<egui::IconData> {
+    let bytes = include_bytes!("../assets/AppIcon128.png");
+    let image = image::load_from_memory(bytes).ok()?.to_rgba8();
+    Some(egui::IconData {
+        rgba: image.as_raw().clone(),
+        width: image.width(),
+        height: image.height(),
+    })
 }

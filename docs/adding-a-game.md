@@ -1,6 +1,6 @@
 # 新增游戏接入指南
 
-本文以新增「欢乐斗地主」（ID: `hlddz`）为例。目标是新增一个 `hlddz` crate，
+本文以已经接入的「欢乐斗地主」（ID: `hlddz`）为参照。目标是新增一个游戏 crate，
 提供 `GameProfile` 和 `Recognizer`，然后注册到应用。
 
 采集、`Session`、GUI 不需要为单个游戏修改。
@@ -307,7 +307,7 @@ hlddz = { path = "../hlddz" }
 
 ## 6. 打包资源
 
-`cargo xtask package-macos` 会自动扫描：
+`cargo xtask package-macos`（安装用 `cargo xtask install-macos`）会自动扫描：
 
 ```text
 crates/*/assets
@@ -353,7 +353,7 @@ fn assets_are_complete() {
 
 再加真实截图回归，参照 `crates/jjddz/tests/golden.rs`：
 
-- 截图放 `shots/hlddz/`
+- 截图放 `samples/<game>/`（本地目录，不入库；参考 `crates/hlddz/tests/golden.rs`）
 - 使用 `HlddzRecognizer` 识别
 - 断言检测到的牌集合和底牌集合
 
@@ -374,7 +374,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 4. 大小王能正确识别
 5. 底牌区域和 3 张门控正确
 6. 自动重置正确
-7. 性能保持在 15 FPS 下有足够余量
+7. 性能保持在默认 10 FPS 下有足够余量（静止帧会被跳过）
 
 ## 9. 检查清单
 
@@ -385,4 +385,4 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - [ ] 模板尺寸/二值化符合要求
 - [ ] 底牌区域和重置比例用真实截图调过
 - [ ] golden 回归覆盖至少一局真实画面
-- [ ] `cargo xtask package-macos` 拷贝了新游戏资源
+- [ ] `cargo xtask install-macos` 拷贝了新游戏资源且能启动

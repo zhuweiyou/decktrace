@@ -111,6 +111,42 @@ impl AutoReset {
     }
 }
 
+/// 32×20 灰度缩略图，用来判断画面是否变化。
+const THUMB_W: u32 = 32;
+const THUMB_H: u32 = 20;
+const STATIC_DIFF: f32 = 1.2;
+
+fn frame_thumb(image: &image::RgbImage) -> Vec<u8> {
+    let (width, height) = image.dimensions();
+    let mut out = vec![0u8; (THUMB_W * THUMB_H) as usize];
+    for ty in 0..THUMB_H {
+        let y0 = ty * height / THUMB_H;
+        let y1 = ((ty + 1) * height / THUMB_H).max(y0 + 1);
+        for tx in 0..THUMB_W {
+            let x0 = tx * width / THUMB_W;
+            let x1 = ((tx + 1) * width / THUMB_W).max(x0 + 1);
+            let step_y = ((y1 - y0) / 8).max(1);
+            let step_x = ((x1 - x0) / 8).max(1);
+            let mut sum = 0u32;
+            let mut count = 0u32;
+            for y in (y0..y1).step_by(step_y as usize) {
+                for x in (x0..x1).step_by(step_x as usize) {
+                    let [r, g, b] = image.get_pixel(x, y).0;
+                    sum += (u32::from(r) * 299 + u32::from(g) * 587 + u32::from(b) * 114) / 1000;
+                    count += 1;
+                }
+            }
+            out[(ty * THUMB_W + tx) as usize] = (sum / count.max(1)) as u8;
+        }
+    }
+    out
+}
+
+fn mean_abs_diff(a: &[u8], b: &[u8]) -> f32 {
+    let sum: u32 = a.iter().zip(b).map(|(x, y)| x.abs_diff(*y) as u32).sum();
+    sum as f32 / a.len().max(1) as f32
+}
+
 pub struct SessionConfig {
     pub fps: f32,
     pub min_hits: usize,
@@ -122,7 +158,7 @@ pub struct SessionConfig {
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
-            fps: 15.0,
+            fps: 10.0,
             min_hits: 2,
             instant_score: 0.92,
             pending_ttl: 1.6,
@@ -140,6 +176,8 @@ pub struct Session {
     stream: Box<dyn CaptureStream>,
     started: Instant,
     frame_no: u64,
+    last_thumb: Option<Vec<u8>>,
+    static_frames: u32,
     trace: bool,
     trace_seen: usize,
     trace_armed: bool,
@@ -171,6 +209,8 @@ impl Session {
             stream,
             started: Instant::now(),
             frame_no: 0,
+            last_thumb: None,
+            static_frames: 0,
             trace: std::env::var("DECKTRACE_TRACE").is_ok(),
             trace_seen: usize::MAX,
             trace_armed: false,
@@ -197,7 +237,21 @@ impl Session {
         };
         self.frame_no += 1;
         let now = self.started.elapsed().as_secs_f64();
-        let detect_jokers = self.frame_no.is_multiple_of(2) && !self.tracker.jokers_known();
+
+        // 牌桌大部分时间是静止的；画面几乎没变就跳过整帧识别，省 CPU。
+        let thumb = frame_thumb(&frame.image);
+        let moved = self
+            .last_thumb
+            .as_ref()
+            .is_none_or(|prev| mean_abs_diff(prev, &thumb) >= STATIC_DIFF);
+        self.last_thumb = Some(thumb);
+        if !moved && self.static_frames >= 3 {
+            self.static_frames = self.static_frames.saturating_add(1);
+            return Ok(None);
+        }
+        self.static_frames = if moved { 0 } else { self.static_frames + 1 };
+
+        let detect_jokers = self.frame_no.is_multiple_of(3) && !self.tracker.jokers_known();
         let result = self.recognizer.recognize(&frame.image, detect_jokers);
         self.auto_reset.maybe_reset(
             &mut self.tracker,

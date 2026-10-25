@@ -42,9 +42,10 @@
 crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer、CardTracker
   jjddz/       # JJ斗地主适配：profile、templates、recognition
+  hlddz/       # 欢乐斗地主适配：profile、templates、recognition
   capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现
   decktrace/   # GUI + Session + registry（唯一发布产物）
-xtask/         # cargo xtask package-macos
+xtask/         # cargo xtask package-macos / install-macos / icon
 docs/          # 详细开发文档
 ```
 
@@ -54,6 +55,7 @@ docs/          # 详细开发文档
 tracking
   ↑        ↑         ↑
 jjddz   capture   decktrace（应用层）
+hlddz
 ```
 
 规则：
@@ -74,11 +76,13 @@ jjddz   capture   decktrace（应用层）
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace                  # 自动检测游戏窗口
-cargo run --release -p decktrace -- --game jjddz  # 调试时强制指定
+cargo run --release -p decktrace                  # 自动检测游戏窗口（默认 auto）
+cargo run --release -p decktrace -- --game hlddz  # 调试时强制指定
 cargo build --release -p decktrace                # 只编译
-cargo xtask package-macos                         # 生成 dist/decktrace.app
-open dist/decktrace.app                           # 运行打包产物
+cargo xtask package-macos                         # 生成 dist/斗地主记牌器.app
+cargo xtask install-macos                         # 打包 + 签名 + 安装到 /Applications
+cargo xtask icon                                  # 由 AppIcon.png 重新生成 icns
+open dist/斗地主记牌器.app                         # 运行打包产物
 ```
 
 无窗口时程序显示等待并每 500ms 重试，这是预期行为。
@@ -129,7 +133,7 @@ cargo test --release --workspace
 ```bash
 cargo run --release -p decktrace
 # 或
-cargo xtask package-macos && open dist/decktrace.app
+cargo xtask install-macos
 ```
 
 检查：
@@ -145,12 +149,16 @@ cargo xtask package-macos && open dist/decktrace.app
 ## 7. 打包
 
 ```bash
-cargo xtask package-macos
+cargo xtask install-macos   # 日常用这个：打包 + 签名 + 装到 /Applications
+cargo xtask package-macos   # 只出 dist/斗地主记牌器.app
 ```
 
 - 打包逻辑在 `xtask/`，不要恢复 shell 脚本。
+- 产物名是 `斗地主记牌器.app`；bundle id `com.zhuweiyou.decktrace`。
+- 签名默认找本机 `decktrace-dev` 自签名证书（`--sign` 可覆盖）；ad-hoc 会导致 TCC 重复授权。
 - 只处理 `crates/<game>/src/profile.rs` 存在的游戏 crate。
 - 资源复制到 `Contents/Resources/assets/<game>`；目录名必须等于 `GameProfile.id`。
+- `Info.plist` 必须写到 `Contents/Info.plist`（写进 Resources 会导致 codesign 失败）。
 - macOS Swift runtime、Info.plist、签名细节见 [docs/packaging.md](docs/packaging.md)。
 - Windows 的 WGC 路线、验证矩阵和后续 `package-windows` 计划见 [docs/windows.md](docs/windows.md)。
 
@@ -163,7 +171,7 @@ cargo xtask package-macos
 - [ ] 真实截图/真实窗口验证，保留失败样本
 - [ ] 全部 Rust 测试通过
 - [ ] 识别性能无明显退化
-- [ ] `dist/decktrace.app` 能启动并正常显示
+- [ ] `/Applications/斗地主记牌器.app` 能启动并正常显示，图标正确
 - [ ] README 只包含用户内容；开发内容在 AGENTS/docs
 - [ ] 架构/识别/打包变化已同步 `docs/`
 - [ ] 无残留后台进程、无临时文件污染源码目录

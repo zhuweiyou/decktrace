@@ -16,12 +16,20 @@
 | 游戏一直等待窗口 | 窗口标题/owner 不匹配 | 检查 `WindowSelector`，临时用 `--game <id>` 调试 |
 | Windows 抓到黑屏 | PrintWindow/BitBlt 不支持硬件加速窗口 | 先让窗口前台可见；正式方案见 [Windows 采集路线](windows.md) |
 | Windows 冒烟无法运行 | Wine 对 x86_64 PE/版本兼容性问题 | 在真实 Windows 或 Windows CI 上跑 `windows-smoke` |
+| 每次更新都要重新授权屏幕录制 | ad-hoc 签名每次构建都变 | 用本机 `decktrace-dev` 证书，`cargo xtask install-macos` |
+| codesign 报 bundle format unrecognized | `Info.plist` 写到了 `Contents/Resources/` | 必须写 `Contents/Info.plist` |
+| 欢乐斗地主底牌半透明时认不全 | 粉/灰字形对比度低，普通掩码抓不到 | `detect_bottom_cards` 低对比度通路 + 3x 放大 |
+| 欢乐斗地主新局不重置 | `hand_bottom_ratio` 大于手牌字形底部 | 设 0.78（字形底部约 0.79） |
+| 托管时手牌漏识别 | 半透明遮罩压暗牌面 | 红色掩码与卡面亮度门限已放宽 |
+| CPU 占用偏高 | 全帧率识别 + 王搜索；牌桌多数时间静止 | 静止帧跳过 + 默认 10fps + 王搜索降频 |
 
 ## 常用命令
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace
-cargo xtask package-macos
-DECKTRACE_TIMING=1 cargo run --release -p decktrace
+cargo run --release -p decktrace          # 默认 auto 检测
+cargo xtask install-macos                 # 打包 + 签名 + 安装
+cargo xtask icon                          # 重新生成应用图标
+DECKTRACE_TIMING=1 cargo run --release -p decktrace   # 单帧耗时
+DECKTRACE_TRACE=1 cargo run --release -p decktrace    # 入账/底牌/重置逐条打印（仅调试）
 ```
