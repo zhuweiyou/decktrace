@@ -112,7 +112,6 @@ pub fn profile() -> GameProfile {
         name: "JJ斗地主".to_string(),
         window: WindowSelector::new("JJ斗地主"),
         templates_dir: assets.join("templates"),
-        card_assets_dir: assets.join("cards"),
         rank_totals,
         display_ranks,
         labels,

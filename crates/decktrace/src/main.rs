@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -206,6 +207,7 @@ struct DeckApp {
     reset: Arc<AtomicBool>,
     snapshot: Option<TrackerSnapshot>,
     error: Option<String>,
+    card_assets_dir: PathBuf,
     sources: HashMap<String, RgbaImage>,
     textures: HashMap<(String, bool), egui::TextureHandle>,
     badge: Option<egui::TextureHandle>,
@@ -228,6 +230,7 @@ impl DeckApp {
             reset,
             snapshot: None,
             error: None,
+            card_assets_dir: card_assets_dir(),
             sources: HashMap::new(),
             textures: HashMap::new(),
             badge: None,
@@ -283,11 +286,7 @@ impl DeckApp {
 
     fn source(&mut self, card_id: &str) -> Option<&RgbaImage> {
         if !self.sources.contains_key(card_id) {
-            let path = self
-                .game
-                .as_ref()?
-                .card_assets_dir
-                .join(format!("{card_id}.png"));
+            let path = self.card_assets_dir.join(format!("{card_id}.png"));
             let image = image::open(path).ok()?.to_rgba8();
             self.sources.insert(card_id.to_string(), image);
         }
@@ -395,6 +394,31 @@ impl Drop for DeckApp {
             window_state::save(pos);
         }
     }
+}
+
+fn card_assets_dir() -> PathBuf {
+    if let Ok(root) = std::env::var("DECKTRACE_ASSETS") {
+        let cards = PathBuf::from(root).join("cards");
+        if cards.is_dir() {
+            return cards;
+        }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        // decktrace.app/Contents/MacOS/decktrace -> Contents/Resources/assets/cards
+        if let Some(contents) = exe.parent().and_then(|macos| macos.parent()) {
+            let cards = contents.join("Resources/assets/cards");
+            if cards.is_dir() {
+                return cards;
+            }
+        }
+        if let Some(dir) = exe.parent() {
+            let cards = dir.join("assets/cards");
+            if cards.is_dir() {
+                return cards;
+            }
+        }
+    }
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/cards")
 }
 
 fn load_bottom_badge(ctx: &egui::Context) -> Option<egui::TextureHandle> {

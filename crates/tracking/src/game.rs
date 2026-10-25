@@ -12,7 +12,6 @@ pub struct GameProfile {
     pub name: String,
     pub window: WindowSelector,
     pub templates_dir: PathBuf,
-    pub card_assets_dir: PathBuf,
     pub rank_totals: BTreeMap<String, u8>,
     pub display_ranks: Vec<String>,
     pub labels: BTreeMap<String, String>,
@@ -66,12 +65,6 @@ impl GameProfile {
             return Err(format!(
                 "游戏模板目录不存在：{}",
                 self.templates_dir.display()
-            ));
-        }
-        if !self.card_assets_dir.exists() {
-            return Err(format!(
-                "游戏牌面素材目录不存在：{}",
-                self.card_assets_dir.display()
             ));
         }
         for rank in &self.display_ranks {

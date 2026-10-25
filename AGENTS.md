@@ -40,7 +40,7 @@
 ```text
 crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer、CardTracker
-  jjddz/       # JJ斗地主适配：profile、templates、cards、recognition
+  jjddz/       # JJ斗地主适配：profile、templates、recognition
   capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现
   decktrace/   # GUI + Session + registry（唯一发布产物）
 xtask/         # cargo xtask package-macos
@@ -58,7 +58,8 @@ jjddz   capture   decktrace（应用层）
 规则：
 
 - 每个游戏一个独立 crate：`crates/<id>`，目录名必须等于 `GameProfile.id`。
-- 游戏 crate 必须有 `src/profile.rs` 和 `assets/`；打包靠这个约定扫描。
+- 游戏 crate 必须有 `src/profile.rs` 和 `assets/`（识别模板）；打包靠这个约定扫描。
+- GUI 牌面 `cards/` 是应用资源，放在 `crates/decktrace/assets/cards`，所有游戏共用。
 - 所有内部包 `publish = false`。
 - `tracking` 不依赖 OS、UI、具体游戏。
 - 识别实现属于各游戏 crate（如 `jjddz/src/recognition.rs`），不要恢复独立识别包。
@@ -99,6 +100,7 @@ open dist/decktrace.app                           # 运行打包产物
 - 炸弹：某点数剩余 4 张齐全，或双王都在，整组反色。不要改成第三种底色。
 - 底牌：不改变牌面底色，在牌面底部居中叠加 9×9 朱红“底”印章，距底 2px。
 - 底牌印章绘制在反色/正色之后，优先级最高。
+- 牌面素材：`crates/decktrace/assets/cards`，应用层共用。
 - 印章素材：`crates/decktrace/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入。
 - 窗口置顶、不可缩放；标题为“斗地主记牌器”。
 - 窗口聚焦时按 `R` 重置本局；退出时保存窗口位置。

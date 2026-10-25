@@ -104,6 +104,13 @@ fn package_macos() -> Result<()> {
         copy_dir(&source, &dest)?;
     }
 
+    // GUI 牌面是应用资源，所有游戏共用。
+    let app_cards = root.join("crates/decktrace/assets/cards");
+    if !app_cards.is_dir() {
+        bail!("缺少 GUI 牌面素材：{}", app_cards.display());
+    }
+    copy_dir(&app_cards, &assets_root.join("cards"))?;
+
     fs::write(resources.join("Info.plist"), info_plist(&version))
         .context("写入 Info.plist 失败")?;
     fs::write(app.join("Contents/PkgInfo"), "APPL????").context("写入 PkgInfo 失败")?;

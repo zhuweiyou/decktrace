@@ -68,7 +68,6 @@ crates/hlddz/
       suits/*.png
       joker.png
       joker_compact.png
-    cards/*.png
 ```
 
 ## 2. 写 GameProfile
@@ -126,7 +125,6 @@ pub fn profile() -> GameProfile {
         window: WindowSelector::new("欢乐斗地主"),
 
         templates_dir: assets.join("templates"),
-        card_assets_dir: assets.join("cards"),
 
         rank_totals,
         display_ranks,
@@ -188,19 +186,15 @@ pub fn profile() -> GameProfile {
 
 ## 3. 准备素材
 
-### 牌面 `cards/`
+### GUI 牌面 `cards/`
 
-GUI 显示用，15×30 PNG，命名规则：
+GUI 牌面是应用层资源，统一放在：
 
 ```text
-3C.png 3D.png 3H.png 3S.png
-...
-10C.png 10D.png 10H.png 10S.png
-JC.png ... AS.png
-BJ.png SJ.png
+crates/decktrace/assets/cards/
 ```
 
-`all_card_ids()` 按 `display_ranks` + `suits` 生成 ID，`BJ/SJ` 单独处理。
+所有游戏共用，不需要为新游戏准备牌面素材。游戏 crate 只负责识别模板。
 
 ### 模板 `templates/ranks/`
 
@@ -332,8 +326,9 @@ crates/*/assets
 
 ```text
 Contents/Resources/assets/
-  jjddz/
-  hlddz/
+  jjddz/templates/
+  hlddz/templates/
+  cards/
 ```
 
 `asset_root()` 会按 `DECKTRACE_ASSETS/hlddz` → `.app/Contents/Resources/assets/hlddz`
@@ -350,11 +345,6 @@ use hlddz::profile;
 fn assets_are_complete() {
     let game = profile();
     game.validate().expect("profile");
-
-    for card_id in game.all_card_ids() {
-        let path = game.card_assets_dir.join(format!("{card_id}.png"));
-        assert!(path.exists(), "缺少牌面素材：{}", path.display());
-    }
 
     assert!(game.templates_dir.join("ranks").is_dir());
     assert!(game.templates_dir.join("suits").is_dir());
@@ -391,7 +381,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - [ ] `cargo test --release --workspace` 通过
 - [ ] `get_game` / `list_games` / `create_recognizer` 已注册
 - [ ] `assets` 路径在开发环境和 `.app` 内都能找到
-- [ ] 54 张牌面齐全
+- [ ] GUI 牌面完整性测试通过（应用层统一资源）
 - [ ] 模板尺寸/二值化符合要求
 - [ ] 底牌区域和重置比例用真实截图调过
 - [ ] golden 回归覆盖至少一局真实画面

@@ -5,7 +5,7 @@
 ```text
 crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer 契约、CardTracker
-  jjddz/       # JJ斗地主适配：profile、模板、牌面素材、识别实现
+  jjddz/       # JJ斗地主适配：profile、识别模板、识别实现
   capture/     # 采集契约 + WindowInfo/RawFrame + macOS/Windows cfg 实现
   decktrace/   # GUI + Session + registry，唯一发布产物
 xtask/         # 开发任务：cargo xtask package-macos
@@ -23,6 +23,7 @@ jjddz   capture   decktrace（应用层）
 
 - `tracking` 不依赖 OS、UI、具体游戏。
 - `jjddz` 只依赖 `tracking`，实现该游戏的 `Recognizer`。
+- GUI 牌面 `cards/` 属于应用层 `crates/decktrace/assets/cards`，不属于游戏。
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg` 和 target-specific dependencies。
 - `decktrace` 是组合根，注入具体游戏识别器和平台实现。
 - 所有内部包 `publish = false`。

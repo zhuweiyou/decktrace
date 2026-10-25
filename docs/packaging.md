@@ -17,8 +17,9 @@ open dist/decktrace.app
 3. 拷贝二进制和 `AppIcon.icns`
 4. 扫描 `crates/*/src/profile.rs`，识别游戏 crate
 5. 拷贝 `crates/<game>/assets` 到 `Contents/Resources/assets/<game>`
-6. 写 `Info.plist`
-7. ad-hoc codesign
+6. 拷贝 `crates/decktrace/assets/cards` 到 `Contents/Resources/assets/cards`
+7. 写 `Info.plist`
+8. ad-hoc codesign
 
 ## 资源约定
 
@@ -32,9 +33,16 @@ open dist/decktrace.app
 运行时资源查找顺序：
 
 ```text
-DECKTRACE_ASSETS/<game>
-.app/Contents/Resources/assets/<game>
-开发目录
+DECKTRACE_ASSETS/<game>      # 识别模板
+DECKTRACE_ASSETS/cards       # GUI 牌面（应用共用）
+```
+
+打包后：
+
+```text
+Contents/Resources/assets/
+  <game>/templates
+  cards/
 ```
 
 ## App 图标
