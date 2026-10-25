@@ -258,3 +258,64 @@ impl Drop for Session {
         self.stream.stop();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tracking::Detection;
+
+    fn hand_card(rank: &str, suit: &str) -> Detection {
+        Detection {
+            rank: rank.to_string(),
+            suit: suit.to_string(),
+            score: 0.95,
+            bbox: (300, 829, 43, 44),
+            rank_score: 0.95,
+            suit_score: 0.95,
+            face_score: 0.9,
+            display: format!("{rank}{suit}"),
+            is_bottom: false,
+        }
+    }
+
+    fn hand(cards: &[(&str, &str)]) -> Vec<Detection> {
+        cards.iter().map(|(r, s)| hand_card(r, s)).collect()
+    }
+
+    #[test]
+    fn new_round_hand_jump_resets_tracker() {
+        // 用真实的欢乐斗地主 profile 验证手牌区间：字形在 y≈829 时必须能被判定为手牌。
+        let mut game = hlddz::profile();
+        game.bottom = None; // 去掉底牌门控，专注验证重置
+        let game = Arc::new(game);
+        let mut tracker = CardTracker::new(game.clone(), 1, 0.0, 1.6);
+        let mut auto = AutoReset::new(true);
+
+        let round_one = hand(&[
+            ("2", "H"), ("2", "S"), ("3", "C"), ("4", "D"), ("5", "H"),
+            ("6", "S"), ("7", "C"), ("8", "D"), ("9", "H"), ("10", "S"),
+            ("J", "C"), ("Q", "D"), ("K", "H"), ("A", "S"), ("3", "H"),
+            ("4", "S"), ("5", "C"),
+        ]);
+        tracker.observe(&round_one, 0.0);
+        assert!(tracker.seen_count() > 0);
+        // 首次看到 17 张手牌可能触发一次“跳变”重置，随后建立基线。
+        auto.maybe_reset(&mut tracker, &game, &round_one, 1100, 0.0);
+        tracker.observe(&round_one, 1.0);
+        assert!(auto.maybe_reset(&mut tracker, &game, &round_one, 1100, 1.0).is_none());
+
+        // 一局结束、手牌消失超过 absent_seconds。
+        assert!(auto.maybe_reset(&mut tracker, &game, &[], 1100, 10.0).is_none());
+
+        // 新一局发牌：17 张新手牌 → 触发重置。
+        let round_two = hand(&[
+            ("2", "C"), ("3", "D"), ("4", "H"), ("5", "S"), ("6", "C"),
+            ("7", "D"), ("8", "H"), ("9", "S"), ("10", "C"), ("J", "D"),
+            ("Q", "H"), ("K", "S"), ("A", "C"), ("2", "D"), ("3", "S"),
+            ("4", "C"), ("5", "D"),
+        ]);
+        let reason = auto.maybe_reset(&mut tracker, &game, &round_two, 1100, 12.0);
+        assert!(reason.is_some(), "新一局没有触发重置");
+        assert_eq!(tracker.seen_count(), 0, "重置后应清空已识别牌");
+    }
+}

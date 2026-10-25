@@ -98,10 +98,11 @@ pub fn profile() -> GameProfile {
         ..RecognitionConfig::default()
     };
 
-    // 手牌横排不重叠，纵向范围约 0.66–0.92（含 2x 阴影）。
+    // 手牌横排不重叠：牌面约 0.66–0.82，点数/花色字形底部到 0.79。
+    // hand_bottom_ratio 必须小于字形底部，否则自动重置永远判定不到手牌。
     let reset = ResetConfig {
         hand_top_ratio: 0.63,
-        hand_bottom_ratio: 0.95,
+        hand_bottom_ratio: 0.78,
         min_hand_cards: 13,
         min_hand_for_jump: 17,
         empty_hand_threshold: 5,

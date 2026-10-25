@@ -291,7 +291,8 @@ impl HlddzRecognizer {
                 }
             }
         }
-        let row_need = ((run_x1 - run_x0) as f32 * 0.6) as u32;
+        // 阈值取严一点：圆角/描边行不算，避免把桌布带进卡片裁剪。
+        let row_need = ((run_x1 - run_x0) as f32 * 0.85) as u32;
         let (Some(top), Some(bottom)) = (
             rows.iter().position(|&count| count >= row_need),
             rows.iter().rposition(|&count| count >= row_need),
@@ -300,84 +301,120 @@ impl HlddzRecognizer {
         };
         let (y0, y1) = (by0 + top as u32, by0 + bottom as u32 + 1);
 
-        // 三张等宽卡片，逐张做低对比度二值化。
-        let slot_w = (run_x1 - run_x0) / 3;
-        let mut found = Vec::new();
-        for slot in 0..3 {
-            let sx0 = bx0 + run_x0 + slot * slot_w + 3;
-            let sx1 = bx0 + run_x0 + (slot + 1) * slot_w - 3;
-            let sy0 = y0 + 3;
-            let sy1 = y1.saturating_sub(3);
-            let (cw, ch) = (sx1.saturating_sub(sx0), sy1.saturating_sub(sy0));
-            if cw < 20 || ch < 40 || sx1 > width || sy1 > height {
-                continue;
-            }
-            // 每张牌按自身亮度分布定阈值：白卡面作背景，字形偏暗或带色偏。
-            let mut lumas = Vec::with_capacity((cw * ch) as usize);
-            let mut chromas = Vec::with_capacity((cw * ch) as usize);
-            for y in 0..ch {
-                for x in 0..cw {
-                    let [r, g, b] = image.get_pixel(sx0 + x, sy0 + y).0;
-                    lumas.push((u32::from(r) + u32::from(g) + u32::from(b)) / 3);
-                    chromas.push(u32::from(r.max(g).max(b)) - u32::from(r.min(g).min(b)));
-                }
-            }
-            let mut sorted = lumas.clone();
-            sorted.sort_unstable();
-            let bg = sorted[(sorted.len() * 9 / 10).min(sorted.len() - 1)];
-            let fg = sorted[sorted.len() / 20];
-            if bg.saturating_sub(fg) < 15 {
-                continue;
-            }
-            let mut mask = GrayImage::new(cw, ch);
-            for y in 0..ch {
-                for x in 0..cw {
-                    let index = (y * cw + x) as usize;
-                    let luma = lumas[index];
-                    let chroma = chromas[index];
-                    let glyph = luma + 22 < bg || (chroma >= 14 && luma + 6 < bg);
-                    mask.put_pixel(x, y, Luma([if glyph { 255 } else { 0 }]));
-                }
-            }
-            let comps: Vec<Comp> = components(&mask)
-                .into_iter()
-                .filter(|c| {
-                    c.area >= 18
-                        && c.w >= 4
-                        && c.h >= 6
-                        && c.w <= (cw as f32 * 0.9) as u32
-                        && c.h <= (ch as f32 * 0.65) as u32
-                })
-                .collect();
-            if comps.is_empty() {
-                continue;
-            }
+        // 整条底牌区一起二值化，再按字形列聚类：不依赖卡片边界，避免描边粘连。
+        let scale = 3u32;
+        let (cw, ch) = (run_x1 - run_x0, y1 - y0);
+        if cw < 90 || ch < 40 || cw * scale > width * 4 {
+            return Vec::new();
+        }
+        let card = image::imageops::crop_imm(image, bx0 + run_x0, y0, cw, ch).to_image();
+        let (bw, bh) = (cw * scale, ch * scale);
+        let big = image::imageops::resize(&card, bw, bh, FilterType::Lanczos3);
 
-            let rank_y = (ch as f32 * 0.55) as u32;
-            let rank_comps: Vec<Comp> = comps
+        let mut lumas = Vec::with_capacity((bw * bh) as usize);
+        let mut chromas = Vec::with_capacity((bw * bh) as usize);
+        for p in big.pixels() {
+            let [r, g, b] = p.0;
+            lumas.push((u32::from(r) + u32::from(g) + u32::from(b)) / 3);
+            chromas.push(u32::from(r.max(g).max(b)) - u32::from(r.min(g).min(b)));
+        }
+        let mut sorted = lumas.clone();
+        sorted.sort_unstable();
+        let bg = sorted[(sorted.len() * 9 / 10).min(sorted.len() - 1)];
+        let fg = sorted[sorted.len() / 20];
+        if bg.saturating_sub(fg) < 12 {
+            return Vec::new();
+        }
+        let mut mask = GrayImage::new(bw, bh);
+        for y in 0..bh {
+            for x in 0..bw {
+                let index = (y * bw + x) as usize;
+                let luma = lumas[index];
+                let chroma = chromas[index];
+                // 半透明字形：要么偏暗（灰字），要么带轻微色偏（粉字）。
+                let glyph = luma + 22 < bg || (chroma >= 14 && luma + 6 < bg);
+                mask.put_pixel(x, y, Luma([if glyph { 255 } else { 0 }]));
+            }
+        }
+        // 卡片描边是贯穿整条的高列/宽行，清掉，避免和字形连成一个分量。
+        let mut columns = vec![0u32; bw as usize];
+        let mut rows = vec![0u32; bh as usize];
+        for (x, y, p) in mask.enumerate_pixels() {
+            if p.0[0] > 0 {
+                columns[x as usize] += 1;
+                rows[y as usize] += 1;
+            }
+        }
+        for (x, count) in columns.iter().enumerate() {
+            if *count as f32 > bh as f32 * 0.72 {
+                for y in 0..bh {
+                    mask.put_pixel(x as u32, y, Luma([0]));
+                }
+            }
+        }
+        for (y, count) in rows.iter().enumerate() {
+            if *count as f32 > bw as f32 * 0.8 {
+                for x in 0..bw {
+                    mask.put_pixel(x, y as u32, Luma([0]));
+                }
+            }
+        }
+
+        let comps: Vec<Comp> = components(&mask)
+            .into_iter()
+            .filter(|c| {
+                c.area >= 40
+                    && c.w >= 6
+                    && c.h >= 8
+                    && c.w <= (bw as f32 * 0.55) as u32
+                    && c.h <= (bh as f32 * 0.65) as u32
+            })
+            .collect();
+        if comps.is_empty() {
+            return Vec::new();
+        }
+
+        // 按 x 重叠聚成“牌列”，每列上方是点数、下方是花色。
+        let mut columns_of_comps: Vec<Vec<Comp>> = Vec::new();
+        for comp in comps {
+            let placed = columns_of_comps.iter_mut().find(|column| {
+                let min_x = column.iter().map(|c| c.x).min().unwrap();
+                let max_x = column.iter().map(|c| c.x + c.w).max().unwrap();
+                let overlap = (comp.x + comp.w).min(max_x).saturating_sub(comp.x.max(min_x));
+                overlap * 2 >= comp.w.min(max_x - min_x)
+            });
+            match placed {
+                Some(column) => column.push(comp),
+                None => columns_of_comps.push(vec![comp]),
+            }
+        }
+        columns_of_comps.sort_by_key(|column| column.iter().map(|c| c.x).min().unwrap());
+
+        let mut found = Vec::new();
+        for column in columns_of_comps {
+            let center = (bh as f32 * 0.5) as u32;
+            let tops: Vec<Comp> = column
                 .iter()
-                .filter(|c| c.y + c.h / 2 <= rank_y)
+                .filter(|c| c.y + c.h / 2 < center)
                 .copied()
                 .collect();
-            if rank_comps.is_empty() {
+            if tops.is_empty() {
                 continue;
             }
-            let rx0 = rank_comps.iter().map(|c| c.x).min().unwrap();
-            let ry0 = rank_comps.iter().map(|c| c.y).min().unwrap();
-            let rx1 = rank_comps.iter().map(|c| c.x + c.w).max().unwrap();
-            let ry1 = rank_comps.iter().map(|c| c.y + c.h).max().unwrap();
+            let rx0 = tops.iter().map(|c| c.x).min().unwrap();
+            let ry0 = tops.iter().map(|c| c.y).min().unwrap();
+            let rx1 = tops.iter().map(|c| c.x + c.w).max().unwrap();
+            let ry1 = tops.iter().map(|c| c.y + c.h).max().unwrap();
             let rank_crop = crop(&mask, rx0, ry0, rx1 - rx0, ry1 - ry0);
             let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
-            if rank_score < 0.55 || rank_score - second_score < 0.05 {
+            if rank_score < 0.52 || rank_score - second_score < 0.05 {
                 continue;
             }
 
-            // 花色：在点数下方找得分最高的候选，红/黑两套都试。
-            let suit_y = (ch as f32 * 0.45) as u32;
             let mut best_suit = (String::new(), 0.0f32, 0u32, 0u32, 0u32, 0u32);
-            for c in comps.iter().filter(|c| c.y + c.h / 2 >= suit_y) {
+            for c in column.iter().filter(|c| c.y + c.h / 2 >= center) {
                 let aspect = c.w as f32 / c.h.max(1) as f32;
-                if !(0.45..=1.8).contains(&aspect) {
+                if !(0.45..=1.9).contains(&aspect) {
                     continue;
                 }
                 let suit_crop = crop(&mask, c.x, c.y, c.w, c.h);
@@ -388,7 +425,7 @@ impl HlddzRecognizer {
                     }
                 }
             }
-            if best_suit.0.is_empty() || best_suit.1 < 0.55 {
+            if best_suit.0.is_empty() || best_suit.1 < 0.52 {
                 continue;
             }
 
@@ -397,10 +434,10 @@ impl HlddzRecognizer {
                 suit: best_suit.0.clone(),
                 score: rank_score * 0.6 + best_suit.1 * 0.4,
                 bbox: (
-                    sx0 + best_suit.2,
-                    sy0 + best_suit.3,
-                    best_suit.4,
-                    best_suit.5,
+                    bx0 + run_x0 + best_suit.2 / scale,
+                    y0 + best_suit.3 / scale,
+                    best_suit.4 / scale,
+                    best_suit.5 / scale,
                 ),
                 rank_score,
                 suit_score: best_suit.1,
