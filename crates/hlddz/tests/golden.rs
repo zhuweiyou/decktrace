@@ -117,3 +117,22 @@ fn bottom_cards_are_marked() {
         ["QH", "JH", "8S"].into_iter().map(str::to_string).collect()
     );
 }
+
+#[test]
+fn faded_bottom_card_is_recognized() {
+    // 单机模式托管界面：底牌 8♥ 8♣ 7♠，其中 7♠ 已经打出，呈半透明灰色。
+    let Some(result) = recognize("frame_bottom_2026.png") else {
+        return;
+    };
+    let bottoms: BTreeSet<String> = result
+        .detections
+        .iter()
+        .filter(|det| det.is_bottom)
+        .map(|det| det.card_id())
+        .collect();
+    assert_eq!(
+        bottoms,
+        ["8H", "8C", "7S"].into_iter().map(str::to_string).collect(),
+        "半透明底牌应三张都识别出来"
+    );
+}

@@ -255,8 +255,8 @@ impl HlddzRecognizer {
                 }
             }
         }
-        let need = ((by1 - by0) as f32 * 0.25) as u32;
-        let mut runs: Vec<(u32, u32)> = Vec::new();
+        let need = ((by1 - by0) as f32 * 0.12) as u32;
+        let mut segments: Vec<(u32, u32)> = Vec::new();
         let mut start: Option<u32> = None;
         for (index, &count) in col.iter().enumerate() {
             let hit = count >= need;
@@ -264,15 +264,23 @@ impl HlddzRecognizer {
                 start = Some(index as u32);
             } else if !hit && start.is_some() {
                 let from = start.take().unwrap();
-                if index as u32 - from >= 100 {
-                    runs.push((from, index as u32));
+                if index as u32 - from >= 16 {
+                    segments.push((from, index as u32));
                 }
             }
         }
         if let Some(from) = start
-            && col.len() as u32 - from >= 100
+            && col.len() as u32 - from >= 16
         {
-            runs.push((from, col.len() as u32));
+            segments.push((from, col.len() as u32));
+        }
+        // 卡片之间有深色分隔线，亮列会断成几段；先桥接小间隙再整体聚类。
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        for (from, to) in segments {
+            match runs.last_mut() {
+                Some(last) if from <= last.1 + 24 => last.1 = to,
+                _ => runs.push((from, to)),
+            }
         }
         let Some((run_x0, run_x1)) = runs
             .into_iter()
