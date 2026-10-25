@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 jjddz = { path = "../jjddz" }
+hlddz = { path = "../hlddz" }
 capture = { path = "../capture" }
 tracking = { path = "../tracking" }
 anyhow.workspace = true

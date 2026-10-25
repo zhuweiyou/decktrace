@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/tracking",
     "crates/jjddz",
+    "crates/hlddz",
     "crates/capture",
     "crates/decktrace",
     "xtask",
