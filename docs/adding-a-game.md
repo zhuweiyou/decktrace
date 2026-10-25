@@ -312,14 +312,20 @@ decktrace-hl = { path = "../decktrace-hl" }
 
 ## 6. 打包资源
 
-`scripts/bundle-macos.sh` 现在按游戏拷贝资源。新增游戏后改成：
+`scripts/bundle-macos.sh` 会自动扫描：
 
-```bash
-for game in jj hl; do
-  cp -R "$ROOT/crates/decktrace-$game/assets" \
-        "$APP/Contents/Resources/assets/$game"
-done
+```text
+crates/decktrace-*/assets
 ```
+
+规则：
+
+- 只有包含 `src/profile.rs` 的游戏 crate 才会被处理
+- crate 目录后缀必须等于 `GameProfile.id`，例如 `decktrace-hl` 对应 `id = "hl"`
+- 每个游戏单独拷到 `Contents/Resources/assets/<game>/`，不会互相覆盖
+- 如果目标目录重复，脚本会直接报错退出
+
+新增游戏时通常不需要改打包脚本，只要遵守上面的目录约定。
 
 最终：
 

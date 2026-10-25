@@ -10,11 +10,19 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/assets"
 
 cp "$ROOT/target/release/decktrace" "$APP/Contents/MacOS/decktrace"
+# 游戏 crate 约定：crates/decktrace-<game>/，且 <game> == GameProfile.id。
+# 只有带 src/profile.rs 的 crate 才处理，避免误拷基础设施 crate 的 assets。
 for game_dir in "$ROOT"/crates/decktrace-*/assets; do
-    [ -d "$game_dir" ] || continue
-    game="$(basename "$(dirname "$game_dir")")"
+    crate_dir="$(dirname "$game_dir")"
+    [ -f "$crate_dir/src/profile.rs" ] || continue
+    game="$(basename "$crate_dir")"
     game="${game#decktrace-}"
-    cp -R "$game_dir" "$APP/Contents/Resources/assets/$game"
+    dest="$APP/Contents/Resources/assets/$game"
+    if [ -e "$dest" ]; then
+        echo "重复的游戏资源目录：$game" >&2
+        exit 1
+    fi
+    cp -R "$game_dir" "$dest"
 done
 cp "$ROOT/crates/decktrace/assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 

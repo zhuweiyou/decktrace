@@ -167,7 +167,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
   - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS/<game>` → `.app/Contents/Resources/assets/<game>` → 开发目录。
-- 打包脚本按游戏拷贝 `crates/decktrace-<game>/assets` 到 `Contents/Resources/assets/<game>`。
+- 打包脚本只处理 `crates/decktrace-<game>/src/profile.rs` 存在的游戏 crate，拷贝到 `Contents/Resources/assets/<game>`；目录后缀必须等于 `GameProfile.id`。
 - App 图标：`crates/decktrace/assets/AppIcon.icns`，打包到 `Contents/Resources`，Info.plist 用 `CFBundleIconFile=AppIcon`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
