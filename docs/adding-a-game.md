@@ -312,7 +312,7 @@ decktrace-hl = { path = "../decktrace-hl" }
 
 ## 6. 打包资源
 
-`scripts/bundle-macos.sh` 会自动扫描：
+`cargo xtask package-macos` 会自动扫描：
 
 ```text
 crates/decktrace-*/assets
@@ -394,4 +394,4 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - [ ] 模板尺寸/二值化符合要求
 - [ ] 底牌区域和重置比例用真实截图调过
 - [ ] golden 回归覆盖至少一局真实画面
-- [ ] `scripts/bundle-macos.sh` 拷贝了新游戏资源
+- [ ] `cargo xtask package-macos` 拷贝了新游戏资源

@@ -5,6 +5,7 @@ members = [
     "crates/decktrace-jj",
     "crates/decktrace-capture",
     "crates/decktrace",
+    "xtask",
 ]
 
 [workspace.package]

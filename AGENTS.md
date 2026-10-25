@@ -35,7 +35,7 @@ crates/
   decktrace-jj/               # JJ 实现：profile、templates、cards、recognition
   decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
-scripts/bundle-macos.sh       # 打包 decktrace.app
+xtask/                        # 开发任务：cargo xtask package-macos
 docs/adding-a-game.md         # 新游戏接入指南
 ```
 
@@ -108,7 +108,7 @@ cargo test --release --workspace
 cargo run --release -p decktrace          # 自动检测游戏窗口
 cargo run --release -p decktrace -- --game jj  # 调试时强制指定
 cargo build --release -p decktrace        # 只编译
-./scripts/bundle-macos.sh                 # 生成 dist/decktrace.app
+cargo xtask package-macos                 # 生成 dist/decktrace.app
 open dist/decktrace.app                   # 运行打包产物
 ```
 
@@ -167,11 +167,11 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
   - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS/<game>` → `.app/Contents/Resources/assets/<game>` → 开发目录。
-- 打包脚本只处理 `crates/decktrace-<game>/src/profile.rs` 存在的游戏 crate，拷贝到 `Contents/Resources/assets/<game>`；目录后缀必须等于 `GameProfile.id`。
+- `cargo xtask package-macos` 只处理 `crates/decktrace-<game>/src/profile.rs` 存在的游戏 crate，拷贝到 `Contents/Resources/assets/<game>`；目录后缀必须等于 `GameProfile.id`。
 - App 图标：`crates/decktrace/assets/AppIcon.icns`，打包到 `Contents/Resources`，Info.plist 用 `CFBundleIconFile=AppIcon`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
-- 正式分发需要 Developer ID 签名和公证；当前脚本只是 ad-hoc 签名。
+- 正式分发需要 Developer ID 签名和公证；当前打包任务只是 ad-hoc 签名。
 
 ### Windows
 
@@ -199,7 +199,7 @@ cargo test --release --workspace
 ```bash
 cargo run --release -p decktrace
 # 或
-./scripts/bundle-macos.sh && open dist/decktrace.app
+cargo xtask package-macos && open dist/decktrace.app
 ```
 
 检查：
@@ -225,7 +225,7 @@ cargo run --release -p decktrace
 | 识别慢 | 全图多尺度模板搜索 | 高度带 + 缩小图选候选 + 局部精验 |
 | 8 连通统计错误 | 通用逐像素 union-find 慢/易错 | RLE 两趟并查集 + 随机 mask 对拍 |
 | `.app` 首次启动无画面 | 没授权屏幕录制 | 系统设置授予权限后重启 |
-| GUI 资源找不到 | 只拷贝了二进制，没拷贝 assets | 用 `scripts/bundle-macos.sh` |
+| GUI 资源找不到 | 只拷贝了二进制，没拷贝 assets | 用 `cargo xtask package-macos` |
 
 ## 10. 完成标准
 
