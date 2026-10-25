@@ -136,3 +136,21 @@ fn faded_bottom_card_is_recognized() {
         "半透明底牌应三张都识别出来"
     );
 }
+
+#[test]
+fn bottom_strip_from_screenshot_is_recognized() {
+    // 来自实际截图：底牌 Q♠ 10♠ 9♠（不透明），用来排除“底牌认不出来”的怀疑。
+    let Some(result) = recognize("frame_user_bottom.png") else {
+        return;
+    };
+    let bottoms: BTreeSet<String> = result
+        .detections
+        .iter()
+        .filter(|det| det.is_bottom)
+        .map(|det| det.card_id())
+        .collect();
+    assert_eq!(
+        bottoms,
+        ["QS", "10S", "9S"].into_iter().map(str::to_string).collect()
+    );
+}
