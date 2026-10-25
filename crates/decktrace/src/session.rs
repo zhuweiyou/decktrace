@@ -247,7 +247,13 @@ impl Session {
             .as_ref()
             .is_none_or(|prev| mean_abs_diff(prev, &thumb) >= STATIC_DIFF);
         self.last_thumb = Some(thumb);
-        if self.tracker.armed() && !moved && self.static_frames >= 3 {
+        // 有“只看到一次”的候选时必须继续看：出牌动画只有一两帧，
+        // 之后画面静止，跳过会导致永远等不到第二帧确认。
+        if self.tracker.armed()
+            && self.tracker.pending_count() == 0
+            && !moved
+            && self.static_frames >= 3
+        {
             self.static_frames = self.static_frames.saturating_add(1);
             return Ok(None);
         }

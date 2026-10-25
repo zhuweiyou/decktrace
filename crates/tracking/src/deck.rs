@@ -91,6 +91,11 @@ impl CardTracker {
         &self.bottom_ids
     }
 
+    /// 还在等第二帧确认的候选；非零时后续帧不能跳过。
+    pub fn pending_count(&self) -> usize {
+        self.pending.len()
+    }
+
     /// 大小王都已有下落（底牌或已出/已见）时，牌堆里不可能还有第三张王，
     /// 后续帧可以完全跳过大小王模板搜索。
     pub fn jokers_known(&self) -> bool {

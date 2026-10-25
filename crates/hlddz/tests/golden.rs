@@ -154,3 +154,16 @@ fn bottom_strip_from_screenshot_is_recognized() {
         ["QS", "10S", "9S"].into_iter().map(str::to_string).collect()
     );
 }
+
+#[test]
+fn played_strip_from_screenshot_is_recognized() {
+    // 来自实际截图：右侧玩家打出 8♥ 7♣ 6♥ 5♠ 4♣ 3♣。
+    // 8♥ 分数 0.73，低于即时阈值，需要两帧确认——用于验证“待确认不被跳帧饿死”。
+    let Some(result) = recognize("frame_user_played.png") else {
+        return;
+    };
+    let ids: BTreeSet<String> = result.detections.iter().map(|det| det.card_id()).collect();
+    for id in ["8H", "7C", "6H", "5S", "4C", "3C"] {
+        assert!(ids.contains(id), "出牌区缺少 {id}");
+    }
+}
