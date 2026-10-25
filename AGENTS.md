@@ -3,6 +3,15 @@
 本项目是 macOS 上的斗地主图像识别记牌器，Rust 实现。后续 Agent 修改时优先遵循这里的约定；
 发现更好的方案，先验证，再更新本文件。
 
+## 0. 文档分工
+
+- `README.md`：只面向使用者。安装、使用、权限、常见问题、已知限制。
+- `AGENTS.md`：面向开发者。架构、构建、识别管线、调试、测试、打包。
+- `docs/adding-a-game.md`：新增游戏的完整步骤和模板/素材规范。
+
+规则：README 不写 crate 结构、库列表、构建/测试命令、内部性能数字；
+这些内容写在 AGENTS 或 docs。
+
 ## 1. 产品约束
 
 1. **只有“点数/字母下方有花色”的才算普通牌。**
@@ -28,24 +37,82 @@ crates/
   decktrace/                  # GUI + Session + registry（二进制 decktrace）
 scripts/bundle-macos.sh       # 打包 decktrace.app
 start-gui.sh                  # 打包并启动
+docs/adding-a-game.md         # 新游戏接入指南
+```
+
+依赖方向：
+
+```text
+decktrace-tracking
+  ↑        ↑         ↑
+  jj    capture   decktrace（应用层）
 ```
 
 规则：
 
-- 每个游戏一个独立 crate：`decktrace-<game>`（例如 `decktrace-jj`）。新增游戏在 `decktrace` 的 `registry.rs` 加分支。
+- 每个游戏一个独立 crate：`decktrace-<game>`（例如 `decktrace-jj`）。
+- 新增游戏完整步骤见 `docs/adding-a-game.md`；注册表在 `decktrace/src/registry.rs`。
+- 应用默认 `--game auto`，扫描所有已注册游戏的窗口并自动选择；`--game <id>` 仅用于调试覆盖。
 - 通用层只依赖 `decktrace-tracking` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `decktrace-capture` 的采集 trait。
 - capture 的抽象和实现内聚在 `decktrace-capture`，平台差异只用 `cfg` 和 target-specific dependencies。
-- 模板识别是 JJ 专属实现，放在 `decktrace-jj/src/recognition.rs`，不要恢复独立识别 crate。
+- 模板识别属于各游戏自己的 crate（如 `decktrace-jj/src/recognition.rs`），不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
+- `README.md` 只写用户文档，开发内容不要写回去。
+
+### 2.1 数据流与线程
+
+```text
+ScreenCaptureKit
+  → CaptureStream
+  → RawFrame (BGRA → RGB)
+  → Session worker
+  → Recognizer
+  → CardTracker
+  → snapshot channel
+  → egui GUI
+```
+
+- 主线程：egui 渲染、贴图缓存、窗口位置保存
+- `capture` worker 线程：窗口检测、采集、识别、记牌
+- ScreenCaptureKit 回调只入队，不识别
+- 采集队列有界，识别消费最新帧；GUI snapshot 通道 `bounded(1)`，新帧覆盖旧帧
+- 默认采集 15 FPS，GUI 每 80ms 重绘
+
+### 2.2 自动检测游戏
+
+- `--game auto` 是默认值
+- worker 调用 `list_games()`，对每个 profile 的 `WindowSelector` 做窗口匹配
+- 只匹配到一个游戏：直接使用
+- 匹配到多个：按注册顺序使用第一个，并打印提示
+- 一个都没匹配到：GUI 显示等待，worker 每 500ms 重试
+- `--game <id>` 仅用于调试/强制覆盖
+- `list_games()` 和 `create_recognizer()` 是新游戏的注册入口
+
+### 2.3 技术栈
+
+| 库 | 用途 |
+| --- | --- |
+| `eframe` / `egui` 0.37 | GUI、置顶窗口、贴图 |
+| `screencapturekit` 11.1 | macOS ScreenCaptureKit |
+| `image` 0.25 | 图片解码、RGB 帧、牌面素材 |
+| `imageproc` 0.27 | 图像辅助操作 |
+| `rayon` 1.10 | 掩码/连通域/大小王搜索并行 |
+| `crossbeam-channel` 0.5 | 采集队列、GUI snapshot |
+| `clap` 4.6 | CLI 参数 |
+| `anyhow` / `thiserror` | 应用/模块错误 |
+| `serde` 1 | 模型/config 派生 |
 
 ## 3. 开发命令
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace
+cargo run --release -p decktrace          # 自动检测游戏窗口
+cargo run --release -p decktrace -- --game jj  # 调试时强制指定
 ./start-gui.sh                 # 打包并打开 dist/decktrace.app
 ./scripts/bundle-macos.sh      # 只打包
 ```
+
+无窗口时程序会显示等待并每 500ms 重试，这是预期行为。
 
 识别/性能验证必须用 release。debug 下模板匹配和连通域会慢一个数量级。
 
@@ -97,8 +164,8 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
   - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
   - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
-- 资源路径解析：`DECKTRACE_ASSETS` → `.app/Contents/Resources/assets/jj` → 开发目录。
-- 打包脚本会拷贝 `crates/decktrace-jj/assets` 到 `Contents/Resources/assets/jj`。
+- 资源路径解析：`DECKTRACE_ASSETS/<game>` → `.app/Contents/Resources/assets/<game>` → 开发目录。
+- 打包脚本按游戏拷贝 `crates/decktrace-<game>/assets` 到 `Contents/Resources/assets/<game>`。
 - App 图标：`crates/decktrace/assets/AppIcon.icns`，打包到 `Contents/Resources`，Info.plist 用 `CFBundleIconFile=AppIcon`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
@@ -156,5 +223,5 @@ cargo test --release --workspace
 - [ ] 全部 Rust 测试通过
 - [ ] 识别性能无明显退化
 - [ ] `dist/decktrace.app` 能启动并正常显示
-- [ ] README/AGENTS 同步
+- [ ] README 只包含用户内容；开发内容在 AGENTS/docs
 - [ ] 无残留后台进程、无临时文件污染源码目录

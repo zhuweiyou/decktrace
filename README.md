@@ -1,146 +1,125 @@
 # 斗地主记牌器（decktrace）
 
-macOS 上的斗地主图像识别记牌器：持续截取目标窗口，识别画面中出现的牌，按“点数 + 花色”
-去重后，用置顶牌条展示剩余牌。
+macOS 上的斗地主记牌器。打开游戏后，它会自动识别画面中的牌，在桌面上显示一条置顶牌条，
+帮你记住还有哪些牌没出。
 
-采集、识别、游戏规则、UI 都是可替换的。当前默认实现面向微信小程序《JJ斗地主》。
+当前支持：**JJ斗地主（微信小程序）**。
 
-- **纯 Rust**：ScreenCaptureKit 采集，无 Swift helper、无 Python 运行时
-- **置顶 GUI**：固定 15×30 像素牌条，炸弹反色，底牌叠加朱红“底”印章
+## 功能
+
+- **自动识别游戏**：打开游戏后启动 decktrace，自动检测当前游戏窗口，不需要手动选择
+- **置顶牌条**：固定 15×30 像素牌面，始终显示在当前窗口上方
+- **炸弹提示**：某点数 4 张齐全，或大小王都在时，整组牌反色
+- **底牌标记**：底牌可见但还没打出时，在牌面底部叠加朱红“底”印章
 - **底牌开局门控**：识别到三张底牌后才开始记牌，避免发牌/翻牌动画误扣
-- **自动重置**：新手牌跳变或整体换牌时清空上一局
+- **自动重置**：检测到新一局的手牌变化时自动清空上一局
+- **窗口位置记忆**：下次启动回到上次位置
+- **本地运行**：不联网、不上传截图
 
-## 快速开始
+## 安装
 
-要求：macOS 12.3+、Xcode Command Line Tools、Rust 1.88+。
+要求：macOS 12.3 或更高版本。
 
-```bash
-# 打包并启动 dist/decktrace.app
-./start-gui.sh
+1. 获取 `decktrace.app`
+2. 拖进「应用程序」文件夹
+3. 双击打开
 
-# 只打包
-./scripts/bundle-macos.sh
+如果 macOS 提示“无法验证开发者”，在「系统设置 → 隐私与安全性」里选择“仍要打开”。
 
-# 开发时直接运行（会继承终端已有的屏幕录制权限）
-cargo run --release -p decktrace
+### 首次启动：屏幕录制权限
 
-# 常用参数（GUI 同样支持）
-cargo run --release -p decktrace -- --fps 15 --min-hits 2
-cargo run --release -p decktrace -- --no-auto-reset
-```
+decktrace 需要读取游戏窗口画面，第一次启动会请求屏幕录制权限：
 
-`decktrace.app` 的内部可执行文件名为 `decktrace`。首次通过 `.app` 启动时，macOS 会要求
-屏幕录制权限：系统设置 → 隐私与安全性 → 屏幕与系统音频录制。
+1. 打开「系统设置」
+2. 进入「隐私与安全性 → 屏幕与系统音频录制」
+3. 打开 decktrace 的开关
+4. 退出并重新打开 decktrace
 
-## 架构
+## 使用
 
-```text
-crates/
-  decktrace-tracking/         # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
-  decktrace-jj/               # JJ 实现：窗口、牌堆、模板、牌面素材、识别引擎
-  decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
-  decktrace/                  # GUI + Session + 游戏注册表（唯一发布产物）
-scripts/
-  bundle-macos.sh             # 生成 dist/decktrace.app
-```
+1. 先打开 JJ斗地主，进入牌局
+2. 启动 decktrace
+3. 识别到游戏窗口后，牌条会自动出现
+4. 牌局结束后可以直接继续下一局，程序会自动重置
 
-数据流：
+默认情况下不需要选择游戏。应用会扫描当前打开的游戏窗口：
 
-```text
-WindowService → CaptureStream → Session → Recognizer → CardTracker → GUI
-```
+- 只开一个支持的游戏：自动进入
+- 没开游戏：窗口显示 `Waiting for game window...`，打开游戏后会自动连接
+- 同时开了多个游戏窗口：会使用检测到的第一个；建议只保留一个
 
-- `GameProfile` / `BottomSpec` / `Recognizer` 抽象在 `decktrace-tracking`。
-- 采集 trait 与平台实现内聚在 `decktrace-capture`：trait 供 Session 使用，macOS/Windows 按 `cfg(target_os)` 编译。
-- 模板识别实现属于 JJ：`decktrace-jj/src/recognition.rs`。
-- `Session` 只依赖 core 的 `Recognizer` 与 capture 的 `CaptureStream/Platform`；`decktrace` 负责把 JJ 和平台实现注入进去。
-- 平台只负责窗口和帧流；识别只产出 `Detection`；UI 只消费 `TrackerSnapshot + GameProfile`。
+### 牌条说明
 
-## 识别规则
+- 牌面按点数从大到小排列
+- **反色牌**：该点数已经四张齐，或大小王都在，提示炸弹
+- **“底”印章**：这张牌已在底牌区出现，但仍然算在剩余牌里；真正打出后才会消失
+- 等待底牌期间显示全部 54 张，不会提前扣牌
 
-1. 用 red/dark 颜色掩码找花色候选；
-2. 花色正上方必须存在点数；
-3. 点数、花色都用二值模板做 IoU 匹配；
-4. 周围必须是浅色卡面；
-5. 大小王没有花色，用 JOK 模板在高度带内粗搜索 + 局部 CCOEFF 精验。
+### 快捷键
 
-牌的身份是 `点数 + 花色`（如 `AH`、`10S`、`BJ`、`SJ`），同一张牌只扣一次。
+- `R`：清空本局，重新开始记牌
 
-### 底牌门控
+## 常见问题
 
-- 底牌识别由游戏 profile 提供：`GameProfile.bottom`（`BottomSpec`）。
-- JJ 使用固定区域 `(0.33, 0.08, 0.47, 0.20)`，需要连续稳定识别到 3 张底牌才 `armed=True`。
-- 底牌出现前，手牌、翻牌动画、中间大牌检测一律不记账。
-- 底牌仍计入剩余；只有真正打出（出现在非底牌区）后才扣除。
-- GUI 中底牌在牌面底部叠加 9×9 朱红“底”印章（距底 2px），不改变牌面本身。
+### 一直显示 Waiting for game window...
 
-### 炸弹提示
+- 确认已经打开 JJ斗地主，并进入了牌局窗口
+- 确认游戏窗口没有被最小化
+- 尝试关闭其他斗地主/棋牌类窗口，只保留一个
+- 如果仍然检测不到，退出 decktrace 后重新打开
 
-- 某点数 4 张齐全，或大小王都在时，该组牌反色显示。
-- 底牌印章叠加在反色/正色之上，不受影响。
-- GUI 窗口聚焦时按 `R` 重置本局；窗口位置会记住。
+### 牌条是空白的
 
-## 性能
+通常是屏幕录制权限没有生效：
 
-release、1800×1100：
+1. 确认「系统设置 → 隐私与安全性 → 屏幕与系统音频录制」里 decktrace 已打开
+2. 完全退出 decktrace
+3. 重新打开
 
-- 不做大小王搜索：约 **8–10ms/帧**
-- 做大小王搜索：约 **16–25ms/帧**
-- 大小王都已有下落后，运行时自动跳过王搜索
-- 采集目标 15fps
+如果权限正常但仍然空白，请附上游戏窗口截图和系统版本反馈。
 
-分段计时：
+### 识别结果不准
 
-```bash
-DECKTRACE_TIMING=1 cargo run --release -p decktrace
-```
+识别依赖当前游戏的界面和牌面素材。以下情况可能影响结果：
 
-实现要点：
+- 游戏换了皮肤、字体或主题
+- 窗口缩放比例异常
+- 游戏窗口被其他窗口遮挡
+- 从一局中间启动，之前已经出过的牌无法补回
 
-- red/dark/combined 一次并行扫描
-- 行程编码（RLE）+ 两趟并查集的连通域
-- 缩小图 CCOEFF 选候选，再局部全分辨率精验
-- 普通牌识别与大小王识别并行
+可以先按 `R` 重置，再重新进入一局。
 
-## 换游戏
+### 支持哪些游戏？
 
-新建一个游戏 crate：
+目前只支持 JJ斗地主。其他斗地主游戏的界面、牌面素材和布局不同，需要单独适配。
 
-1. `crates/decktrace-<game>`（例如 `decktrace-jj`）
-2. 实现 `GameProfile`：窗口特征、牌堆、模板目录、牌面素材、底牌策略、重置规则
-3. 在 `crates/decktrace/src/registry.rs` 加一个分支，并注入该游戏的 `Recognizer` 实现
+### 会上传我的屏幕或数据吗？
 
-没有底牌概念的游戏把 `bottom` 设为 `None`，tracker 会直接开始记牌。
-底牌识别方式不是通用的：可以实现自己的 `BottomSpec`。
+不会。采集、识别和记牌全部在本机完成，程序不联网。
 
-## 打包
+### 支持 Windows 吗？
 
-`scripts/bundle-macos.sh` 会：
-
-- 构建 `decktrace` release 二进制
-- 生成 `dist/decktrace.app/Contents/MacOS/decktrace`
-- 拷贝 `crates/decktrace-jj/assets` 到 `Contents/Resources/assets/jj`
-- 写入 `Info.plist`（含 `NSScreenCaptureUsageDescription`）
-- 做本机 ad-hoc 签名
-
-正式分发需要 Developer ID 签名和公证。
-
-## 测试
-
-```bash
-cargo test --release --workspace
-```
-
-- 牌堆、底牌门控、自动重置：`crates/decktrace-jj/tests/tracker.rs`
-- 真实截图识别回归：`crates/decktrace-jj/tests/golden.rs`
-- 连通域随机 mask 对拍：`engine::tests`
-
-截图回归依赖仓库根目录的 `shots/`；样本缺失时自动跳过。把真实牌局截图放进 `shots/`
-即可本地启用。
+目前只支持 macOS。
 
 ## 已知限制
 
-- 仅实现 macOS 采集；Windows 保留 trait，尚未实现
-- 程序从一局中间启动时，无法补回启动前已经出过的牌
-- 模板与当前游戏字体/皮肤绑定，换皮肤需要更新模板和素材
-- `.app` 首次运行需要手动授予屏幕录制权限
+- 从一局中间启动时，无法补回启动前已经出过的牌
+- 游戏更新界面或更换皮肤后，识别可能失效
+- 不支持同时记多个牌局
+- 程序会占用一定 CPU 做实时识别
+
+## 反馈
+
+遇到问题时请提供：
+
+- macOS 版本
+- 游戏窗口截图
+- 控制台/终端里的错误信息（如果有）
+- 问题复现步骤
+
+反馈地址：<https://github.com/zhuweiyou/decktrace/issues>
+
+## 许可证
+
+MIT
+

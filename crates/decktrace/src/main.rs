@@ -1,13 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use anyhow::Result;
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace::{Session, SessionConfig, create_recognizer, get_game};
-use decktrace_capture::Platform;
+use decktrace::{Session, SessionConfig, create_recognizer, get_game, list_games};
+use decktrace_capture::{Platform, WindowInfo, select_window};
 use decktrace_tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
@@ -21,7 +21,7 @@ const MARGIN: u32 = 4;
 #[derive(Parser, Debug)]
 #[command(name = "decktrace", about = "斗地主记牌器", version)]
 struct Args {
-    #[arg(long, default_value = "jj")]
+    #[arg(long, default_value = "auto", help = "游戏 ID；auto 自动检测")]
     game: String,
     #[arg(long)]
     title: Option<String>,
@@ -44,27 +44,20 @@ enum Message {
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let game = get_game(&args.game).map_err(anyhow::Error::msg)?.clone();
-    let selector = window_selector(&args, &game);
-
     let (tx, rx) = bounded::<Message>(1);
     let stop = Arc::new(AtomicBool::new(false));
     let reset = Arc::new(AtomicBool::new(false));
+    let game_slot = Arc::new(OnceLock::new());
     spawn_worker(
-        game.clone(),
-        selector,
+        args,
         tx,
         rx.clone(),
         stop.clone(),
         reset.clone(),
-        args.min_hits,
-        args.fps,
-        !args.no_auto_reset,
+        game_slot.clone(),
     )?;
 
-    let tracker = CardTracker::new(Arc::new(game.clone()), args.min_hits, 0.92, 1.6);
-    let initial = tracker.snapshot();
-    let app = DeckApp::new(game, rx, stop, reset, initial);
+    let app = DeckApp::new(rx, stop, reset, game_slot);
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("斗地主记牌器")
         .with_inner_size([
@@ -99,33 +92,78 @@ fn window_selector(args: &Args, game: &GameProfile) -> WindowSelector {
     selector
 }
 
+/// 自动检测当前打开的游戏窗口。仅有一个匹配时直接使用；
+/// 多个匹配时按注册顺序取第一个；没有匹配时返回 None，由 worker 重试。
+fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfile, WindowInfo)>> {
+    let windows = platform.window_service().list_windows(false)?;
+
+    if args.game != "auto" {
+        let game = get_game(&args.game).map_err(anyhow::Error::msg)?;
+        let selector = window_selector(args, &game);
+        return Ok(select_window(&windows, &selector)
+            .ok()
+            .map(|window| (game, window)));
+    }
+
+    let mut found = Vec::new();
+    for game in list_games() {
+        if game.validate().is_err() {
+            continue;
+        }
+        let selector = window_selector(args, &game);
+        if let Ok(window) = select_window(&windows, &selector) {
+            found.push((game, window));
+        }
+    }
+    if found.len() > 1 {
+        eprintln!(
+            "检测到 {} 个游戏窗口，使用 {}；可用 --game 指定",
+            found.len(),
+            found[0].0.name
+        );
+    }
+    Ok(found.into_iter().next())
+}
+
 fn spawn_worker(
-    game: GameProfile,
-    selector: WindowSelector,
+    args: Args,
     tx: Sender<Message>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
     reset: Arc<AtomicBool>,
-    min_hits: usize,
-    fps: f32,
-    auto_reset: bool,
+    game_slot: Arc<OnceLock<GameProfile>>,
 ) -> Result<()> {
     std::thread::Builder::new()
         .name("capture".to_string())
         .spawn(move || {
             let result = (|| -> Result<()> {
                 let platform = create_platform()?;
-                let window = platform.window_service().find_window(&selector)?;
+                let (game, window) = loop {
+                    if stop.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
+                    match detect_game(platform.as_ref(), &args) {
+                        Ok(Some(found)) => break found,
+                        Ok(None) => {
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        Err(err) => {
+                            let _ = tx.send(Message::Error(err.to_string()));
+                            return Err(err);
+                        }
+                    }
+                };
                 let recognizer = create_recognizer(&game).map_err(anyhow::Error::msg)?;
+                game_slot.set(game.clone()).ok();
                 let mut session = Session::new(
                     platform.as_ref(),
                     game,
                     &window,
                     recognizer,
                     SessionConfig {
-                        fps,
-                        min_hits,
-                        auto_reset,
+                        fps: args.fps,
+                        min_hits: args.min_hits,
+                        auto_reset: !args.no_auto_reset,
                         ..SessionConfig::default()
                     },
                 )?;
@@ -161,11 +199,12 @@ fn spawn_worker(
 }
 
 struct DeckApp {
-    game: GameProfile,
+    game: Option<GameProfile>,
+    game_slot: Arc<OnceLock<GameProfile>>,
     rx: Receiver<Message>,
     stop: Arc<AtomicBool>,
     reset: Arc<AtomicBool>,
-    snapshot: TrackerSnapshot,
+    snapshot: Option<TrackerSnapshot>,
     error: Option<String>,
     sources: HashMap<String, RgbaImage>,
     textures: HashMap<(String, bool), egui::TextureHandle>,
@@ -176,18 +215,18 @@ struct DeckApp {
 
 impl DeckApp {
     fn new(
-        game: GameProfile,
         rx: Receiver<Message>,
         stop: Arc<AtomicBool>,
         reset: Arc<AtomicBool>,
-        snapshot: TrackerSnapshot,
+        game_slot: Arc<OnceLock<GameProfile>>,
     ) -> Self {
         Self {
-            game,
+            game: None,
+            game_slot,
             rx,
             stop,
             reset,
-            snapshot,
+            snapshot: None,
             error: None,
             sources: HashMap::new(),
             textures: HashMap::new(),
@@ -197,10 +236,19 @@ impl DeckApp {
         }
     }
 
+    fn activate_game(&mut self, game: GameProfile) {
+        let tracker = CardTracker::new(Arc::new(game.clone()), 2, 0.92, 1.6);
+        self.snapshot = Some(tracker.snapshot());
+        self.game = Some(game);
+        self.sources.clear();
+        self.textures.clear();
+        self.last_key = None;
+    }
+
     fn drain(&mut self) {
         while let Ok(message) = self.rx.try_recv() {
             match message {
-                Message::Snapshot(snapshot) => self.snapshot = snapshot,
+                Message::Snapshot(snapshot) => self.snapshot = Some(snapshot),
                 Message::Error(error) => self.error = Some(error),
             }
         }
@@ -235,7 +283,11 @@ impl DeckApp {
 
     fn source(&mut self, card_id: &str) -> Option<&RgbaImage> {
         if !self.sources.contains_key(card_id) {
-            let path = self.game.card_assets_dir.join(format!("{card_id}.png"));
+            let path = self
+                .game
+                .as_ref()?
+                .card_assets_dir
+                .join(format!("{card_id}.png"));
             let image = image::open(path).ok()?.to_rgba8();
             self.sources.insert(card_id.to_string(), image);
         }
@@ -246,24 +298,17 @@ impl DeckApp {
 impl eframe::App for DeckApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.drain();
+        if self.game.is_none()
+            && let Some(game) = self.game_slot.get()
+        {
+            self.activate_game(game.clone());
+        }
         let ctx = ui.ctx().clone();
         if let Some(rect) = ctx.input(|input| input.viewport().outer_rect) {
             self.last_pos = Some(rect.min);
         }
         if ctx.input(|input| input.key_pressed(egui::Key::R)) {
             self.reset.store(true, Ordering::Relaxed);
-        }
-        let remaining = self.game.remaining_card_ids(&self.snapshot.seen_ids);
-        let bombs = bomb_card_ids(&remaining, &self.game);
-        let cards: Vec<(String, bool)> = remaining
-            .iter()
-            .map(|card_id| (card_id.clone(), bombs.contains(card_id)))
-            .collect();
-
-        let key = (remaining.clone(), bombs.clone());
-        if self.last_key.as_ref() != Some(&key) {
-            self.last_key = Some(key);
-            self.ensure_textures(&ctx, &cards);
         }
 
         ui.painter()
@@ -272,6 +317,30 @@ impl eframe::App for DeckApp {
             // egui 默认字体没有中文，错误详情已经在 worker 里输出到 stderr。
             ui.label("Screen capture failed - check Screen Recording permission.");
             return;
+        }
+        let Some(game) = self.game.as_ref() else {
+            ui.label("Waiting for game window...");
+            ctx.request_repaint_after(Duration::from_millis(200));
+            return;
+        };
+        let Some(snapshot) = self.snapshot.as_ref() else {
+            ui.label("Waiting for game window...");
+            ctx.request_repaint_after(Duration::from_millis(200));
+            return;
+        };
+
+        let remaining = game.remaining_card_ids(&snapshot.seen_ids);
+        let bombs = bomb_card_ids(&remaining, game);
+        let cards: Vec<(String, bool)> = remaining
+            .iter()
+            .map(|card_id| (card_id.clone(), bombs.contains(card_id)))
+            .collect();
+        let bottom_ids = snapshot.bottom_ids.clone();
+
+        let key = (remaining.clone(), bombs.clone());
+        if self.last_key.as_ref() != Some(&key) {
+            self.last_key = Some(key);
+            self.ensure_textures(&ctx, &cards);
         }
         let (rect, _) = ui.allocate_exact_size(
             egui::vec2(
@@ -297,7 +366,7 @@ impl eframe::App for DeckApp {
                 egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
                 egui::Color32::WHITE,
             );
-            if self.snapshot.bottom_ids.contains(card_id)
+            if bottom_ids.contains(card_id)
                 && let Some(badge) = &self.badge
             {
                 let badge_rect = egui::Rect::from_min_size(
