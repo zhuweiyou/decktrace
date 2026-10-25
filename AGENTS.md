@@ -12,6 +12,7 @@
   - [识别与调参](docs/recognition.md)
   - [新增游戏](docs/adding-a-game.md)
   - [打包与发布](docs/packaging.md)
+  - [Windows 采集路线](docs/windows.md)
   - [开发排障](docs/troubleshooting.md)
 
 规则：
@@ -67,6 +68,7 @@ jjddz   capture   decktrace（应用层）
 - `decktrace` 是组合根，只负责注入具体游戏和平台实现。
 - 应用默认 `--game auto`；`--game <id>` 仅用于调试覆盖。
 - 详细架构见 [docs/architecture.md](docs/architecture.md)。
+- Windows 当前是实验性 GDI，正式目标是 WGC；实现步骤和验证矩阵见 [docs/windows.md](docs/windows.md)。
 
 ## 3. 开发命令
 
@@ -150,6 +152,7 @@ cargo xtask package-macos
 - 只处理 `crates/<game>/src/profile.rs` 存在的游戏 crate。
 - 资源复制到 `Contents/Resources/assets/<game>`；目录名必须等于 `GameProfile.id`。
 - macOS Swift runtime、Info.plist、签名细节见 [docs/packaging.md](docs/packaging.md)。
+- Windows 的 WGC 路线、验证矩阵和后续 `package-windows` 计划见 [docs/windows.md](docs/windows.md)。
 
 ## 8. 已知问题
 

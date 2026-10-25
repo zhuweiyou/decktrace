@@ -83,7 +83,8 @@ Contents/Resources/assets/
 
 ## Windows
 
-- `crates/capture/src/windows.rs` 当前是可编译占位。
-- 窗口枚举和帧流尚未实现。
-- 接入 Windows Graphics Capture / PrintWindow 时，只改 `capture` 的 Windows `cfg` 分支。
-- 后续增加 `cargo xtask package-windows`，不要把平台判断写进 `Session` 或游戏层。
+- 当前 `crates/capture/src/windows.rs` 是实验性的 GDI `PrintWindow`/`BitBlt` 后端。
+- 已通过 Windows GNU target 的 `cargo check`，未在真实 Windows 游戏窗口验证。
+- 正式目标、WGC 实现步骤和验证矩阵见 [Windows 采集路线](windows.md)。
+- 后续增加 `cargo xtask package-windows`；当前只支持 `package-macos`。
+- 不要把平台判断写进 `Session` 或游戏层。

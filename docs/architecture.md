@@ -78,4 +78,5 @@ ScreenCaptureKit
 
 - 新游戏：见 [adding-a-game.md](adding-a-game.md)。
 - 新平台：在 `capture` 内增加 `cfg` 模块，不要让 `Session` 或游戏层出现平台判断。
+- Windows 当前为实验 GDI；WGC 正式方案和验证矩阵见 [windows.md](windows.md)。
 - 识别实现：跟随游戏 crate，不恢复独立通用识别包。

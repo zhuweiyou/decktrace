@@ -4,6 +4,7 @@
 - [识别管线与调参](recognition.md)
 - [新增游戏](adding-a-game.md)
 - [打包与发布](packaging.md)
+- [Windows 采集路线](windows.md)
 - [开发排障](troubleshooting.md)
 - [AGENTS.md](../AGENTS.md)：Agent/开发者必须遵循的约定、命令和验收清单
 
