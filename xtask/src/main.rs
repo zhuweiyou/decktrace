@@ -7,11 +7,29 @@ use std::process::Command;
 use anyhow::{Context, Result, bail};
 
 fn main() -> Result<()> {
-    let command = std::env::args().nth(1);
+    let mut args = std::env::args().skip(1);
+    let command = args.next();
     match command.as_deref() {
-        Some("package-macos") => package_macos(),
+        Some("package-macos") => {
+            let mut sign = std::env::var("DECKTRACE_SIGN_IDENTITY").ok();
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--sign" => {
+                        sign = Some(args.next().context("--sign 后面缺证书名称")?);
+                    }
+                    other => bail!("未知参数：{other}"),
+                }
+            }
+            package_macos(sign.as_deref())
+        }
         Some("help") | None => {
-            println!("用法：cargo xtask package-macos");
+            println!(
+                "用法：cargo xtask package-macos [--sign <证书名>]\n\
+                 \n\
+                 不传 --sign 时用 ad-hoc 签名；ad-hoc 每次构建签名都会变，\n\
+                 macOS 会把它当成新应用，屏幕录制权限需要重新授权。\n\
+                 用固定的自签名证书可以避免反复授权。"
+            );
             Ok(())
         }
         Some(other) => bail!("未知 xtask：{other}（可用：package-macos）"),
@@ -39,7 +57,7 @@ fn run(command: &mut Command) -> Result<()> {
     Ok(())
 }
 
-fn package_macos() -> Result<()> {
+fn package_macos(sign_identity: Option<&str>) -> Result<()> {
     if !cfg!(target_os = "macos") {
         bail!("package-macos 只能在 macOS 上运行");
     }
@@ -115,13 +133,14 @@ fn package_macos() -> Result<()> {
         .context("写入 Info.plist 失败")?;
     fs::write(app.join("Contents/PkgInfo"), "APPL????").context("写入 PkgInfo 失败")?;
 
-    // ad-hoc 签名便于本机 TCC 稳定识别；正式分发仍需 Developer ID + 公证。
+    // 自定义证书签名时 TCC 身份稳定，重建后不用重新授权；否则退回 ad-hoc。
+    let identity = sign_identity.unwrap_or("-");
     let status = Command::new("codesign")
-        .args(["--force", "--deep", "--sign", "-"])
+        .args(["--force", "--deep", "--sign", identity])
         .arg(&app)
         .status();
     if !status.map(|status| status.success()).unwrap_or(false) {
-        eprintln!("警告：ad-hoc codesign 失败，产物仍已生成");
+        eprintln!("警告：codesign 失败（{identity}），产物仍已生成");
     }
 
     println!("{}", app.display());

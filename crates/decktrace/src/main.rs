@@ -116,12 +116,16 @@ fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfi
             found.push((game, window));
         }
     }
-    if found.len() > 1 {
-        eprintln!(
-            "检测到 {} 个游戏窗口，使用 {}；可用 --game 指定",
-            found.len(),
+    match found.len() {
+        0 => {}
+        1 => eprintln!(
+            "自动检测到游戏：{}（{}）",
+            found[0].0.name, found[0].0.id
+        ),
+        count => eprintln!(
+            "检测到 {count} 个游戏窗口，使用 {}；可用 --game 指定",
             found[0].0.name
-        );
+        ),
     }
     Ok(found.into_iter().next())
 }

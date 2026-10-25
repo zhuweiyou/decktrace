@@ -88,3 +88,21 @@ Contents/Resources/assets/
 - 正式目标、WGC 实现步骤和验证矩阵见 [Windows 采集路线](windows.md)。
 - 后续增加 `cargo xtask package-windows`；当前只支持 `package-macos`。
 - 不要把平台判断写进 `Session` 或游戏层。
+
+
+## 签名与屏幕录制权限
+
+macOS 的屏幕录制授权是按**代码签名**绑定到应用上的。默认用 ad-hoc 签名
+（`codesign --sign -`），每次重新构建签名都会变，系统会把它当成一个新应用，
+于是又要重新授权一次。
+
+- 日常开发：直接 `cargo run --release -p decktrace`，子进程继承终端/IDE 的权限，不会反复弹授权。
+- 想反复用 `.app` 调试：先做一张固定的自签名证书（钥匙串访问 → 证书助理 →
+  创建证书，类型选“代码签名”），然后：
+
+```bash
+cargo xtask package-macos --sign "decktrace-dev"
+```
+
+  同证书签名的构建在首次授权后不会再弹窗。
+- 对外分发仍需 Developer ID 签名 + 公证。
