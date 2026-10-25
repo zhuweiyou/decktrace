@@ -9,7 +9,7 @@ use imageproc::drawing::draw_hollow_rect_mut;
 use imageproc::rect::Rect;
 use thiserror::Error;
 
-use decktrace_tracking::{
+use tracking::{
     BottomSpec, Detection, GameProfile, RecognitionConfig, RecognitionResult, Recognizer,
     SUIT_SYMBOLS,
 };

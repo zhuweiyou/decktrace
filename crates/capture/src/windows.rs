@@ -4,7 +4,7 @@
 //! 或 PrintWindow。当前所有操作都会返回明确的“尚未实现”。
 
 use crate::{CaptureError, CaptureStream, Platform, WindowInfo, WindowService};
-use decktrace_tracking::WindowSelector;
+use tracking::WindowSelector;
 
 pub struct WindowsPlatform {
     windows: WindowsWindowService,

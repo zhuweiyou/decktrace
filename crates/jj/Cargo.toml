@@ -1,12 +1,13 @@
 [package]
-name = "decktrace-jj"
+name = "jj"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
-decktrace-tracking = { path = "../decktrace-tracking" }
+tracking = { path = "../tracking" }
 image.workspace = true
 imageproc.workspace = true
 rayon.workspace = true

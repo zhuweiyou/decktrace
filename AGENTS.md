@@ -31,30 +31,30 @@
 
 ```text
 crates/
-  decktrace-tracking/         # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
-  decktrace-jj/               # JJ 实现：profile、templates、cards、recognition
-  decktrace-capture/          # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
-  decktrace/                  # GUI + Session + registry（二进制 decktrace）
-xtask/                        # 开发任务：cargo xtask package-macos
-docs/adding-a-game.md         # 新游戏接入指南
+  tracking/          # 牌模型、GameProfile/BottomSpec、Recognizer、CardTracker
+  jj/                # JJ 实现：profile、templates、cards、recognition
+  capture/           # 采集 trait + WindowInfo/RawFrame + macOS/Windows 实现（cfg）
+  decktrace/         # GUI + Session + registry（二进制 decktrace）
+xtask/               # 开发任务：cargo xtask package-macos
+docs/adding-a-game.md  # 新游戏接入指南
 ```
 
 依赖方向：
 
 ```text
-decktrace-tracking
+tracking
   ↑        ↑         ↑
   jj    capture   decktrace（应用层）
 ```
 
 规则：
 
-- 每个游戏一个独立 crate：`decktrace-<game>`（例如 `decktrace-jj`）。
+- 每个游戏一个独立 crate：`crates/<game>`（例如 `crates/jj`）；内部包一律 `publish = false`。
 - 新增游戏完整步骤见 `docs/adding-a-game.md`；注册表在 `decktrace/src/registry.rs`。
 - 应用默认 `--game auto`，扫描所有已注册游戏的窗口并自动选择；`--game <id>` 仅用于调试覆盖。
-- 通用层只依赖 `decktrace-tracking` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `decktrace-capture` 的采集 trait。
-- capture 的抽象和实现内聚在 `decktrace-capture`，平台差异只用 `cfg` 和 target-specific dependencies。
-- 模板识别属于各游戏自己的 crate（如 `decktrace-jj/src/recognition.rs`），不要恢复独立识别 crate。
+- 通用层只依赖 `tracking` 的 `GameProfile` / `BottomSpec` / `Recognizer`，以及 `capture` 的采集 trait。
+- capture 的抽象和实现内聚在 `capture`，平台差异只用 `cfg` 和 target-specific dependencies。
+- 模板识别属于各游戏自己的 crate（如 `jj/src/recognition.rs`），不要恢复独立识别 crate。
 - 发布产物只有 GUI，不提供 TUI 二进制。
 - `README.md` 只写用户文档，开发内容不要写回去。
 
@@ -135,7 +135,7 @@ red/dark 掩码 → 连通域 → 花色候选过滤 → 花色上方定位点�
 DECKTRACE_TIMING=1 cargo run --release -p decktrace
 ```
 
-真实截图回归在 `crates/decktrace-jj/tests/golden.rs`，依赖根目录 `shots/`（本地目录，不入库）；
+真实截图回归在 `crates/jj/tests/golden.rs`，依赖根目录 `shots/`（本地目录，不入库）；
 样本缺失时 skip。修改识别逻辑后必须跑完整 `cargo test --release --workspace`。
 
 ## 5. 底牌门控
@@ -164,10 +164,10 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 - 窗口枚举与帧流都走 ScreenCaptureKit；`CVPixelBuffer` 在进程内转 RGB。
 - `screencapturekit` 的 Swift 桥接需要 Swift 运行时：
   - `.cargo/config.toml` 给最终二进制加 `-rpath /usr/lib/swift`
-  - `crates/decktrace-capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
+  - `crates/capture/build.rs` 把 CLT 的 Swift 静态兼容库目录加入 link search
   这两处不要删，否则 dyld 会找不到 `libswift_Concurrency.dylib`。
 - 资源路径解析：`DECKTRACE_ASSETS/<game>` → `.app/Contents/Resources/assets/<game>` → 开发目录。
-- `cargo xtask package-macos` 只处理 `crates/decktrace-<game>/src/profile.rs` 存在的游戏 crate，拷贝到 `Contents/Resources/assets/<game>`；目录后缀必须等于 `GameProfile.id`。
+- `cargo xtask package-macos` 只处理 `crates/<game>/src/profile.rs` 存在的游戏 crate，拷贝到 `Contents/Resources/assets/<game>`；目录名必须等于 `GameProfile.id`。
 - App 图标：`crates/decktrace/assets/AppIcon.icns`，打包到 `Contents/Resources`，Info.plist 用 `CFBundleIconFile=AppIcon`。
 - `Info.plist` 必须包含 `NSScreenCaptureUsageDescription`。
 - 首次运行需要屏幕录制权限；直接终端运行会继承终端权限，`.app` 需要单独授权。
@@ -175,7 +175,7 @@ DECKTRACE_TIMING=1 cargo run --release -p decktrace
 
 ### Windows
 
-- 当前 `crates/decktrace-capture/src/windows.rs` 是可编译占位，窗口枚举和帧流尚未实现。
+- 当前 `crates/capture/src/windows.rs` 是可编译占位，窗口枚举和帧流尚未实现。
 - 接入 Windows Graphics Capture / PrintWindow 时，在 `capture` 的 Windows `cfg` 分支内实现，
   不要让 `Session` 或游戏层出现平台判断。
 

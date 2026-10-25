@@ -1,6 +1,6 @@
 # 新增游戏接入指南
 
-本文以新增「欢乐斗地主」（ID: `hl`）为例。目标是新增一个 `decktrace-hl` crate，
+本文以新增「欢乐斗地主」（ID: `hl`）为例。目标是新增一个 `hl` crate，
 提供 `GameProfile` 和 `Recognizer`，然后注册到应用。
 
 采集、`Session`、GUI 不需要为单个游戏修改。
@@ -21,28 +21,29 @@
 在根 `Cargo.toml` 的 `workspace.members` 增加：
 
 ```toml
-"crates/decktrace-hl",
+"crates/hl",
 ```
 
-新建 `crates/decktrace-hl/Cargo.toml`：
+新建 `crates/hl/Cargo.toml`：
 
 ```toml
 [package]
-name = "decktrace-hl"
+name = "hl"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [dependencies]
-decktrace-tracking = { path = "../decktrace-tracking" }
+tracking = { path = "../tracking" }
 image.workspace = true
 imageproc.workspace = true
 rayon.workspace = true
 thiserror.workspace = true
 ```
 
-新建 `crates/decktrace-hl/src/lib.rs`：
+新建 `crates/hl/src/lib.rs`：
 
 ```rust
 pub mod profile;
@@ -55,7 +56,7 @@ pub use recognition::HlRecognizer;
 目录最终类似：
 
 ```text
-crates/decktrace-hl/
+crates/hl/
   Cargo.toml
   src/
     lib.rs
@@ -72,14 +73,14 @@ crates/decktrace-hl/
 
 ## 2. 写 GameProfile
 
-`src/profile.rs` 以 `decktrace-jj/src/profile.rs` 为模板，核心是：
+`src/profile.rs` 以 `jj/src/profile.rs` 为模板，核心是：
 
 ```rust
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use decktrace_tracking::{
+use tracking::{
     BottomConfig, GameProfile, JokerBand, RecognitionConfig, ResetConfig, WindowSelector,
 };
 
@@ -232,8 +233,8 @@ BJ.png SJ.png
 
 ## 4. 实现 Recognizer
 
-第一版最快方式：复制 `crates/decktrace-jj/src/recognition.rs` 到
-`crates/decktrace-hl/src/recognition.rs`，然后：
+第一版最快方式：复制 `crates/jj/src/recognition.rs` 到
+`crates/hl/src/recognition.rs`，然后：
 
 - `JjRecognizer` → `HlRecognizer`
 - 保留 `Scratch`、RLE 连通域、模板 IoU、NMS、大小王搜索
@@ -268,12 +269,12 @@ impl Recognizer for HlRecognizer {
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
     match id {
         "jj" => {
-            let game = decktrace_jj::profile();
+            let game = jj::profile();
             game.validate()?;
             Ok(game)
         }
         "hl" => {
-            let game = decktrace_hl::profile();
+            let game = hl::profile();
             game.validate()?;
             Ok(game)
         }
@@ -283,18 +284,18 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
 
 pub fn list_games() -> Vec<GameProfile> {
     vec![
-        decktrace_jj::profile(),
-        decktrace_hl::profile(),
+        jj::profile(),
+        hl::profile(),
     ]
 }
 
 pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String> {
     match game.id.as_str() {
         "jj" => Ok(Arc::new(
-            decktrace_jj::JjRecognizer::new(game).map_err(|e| e.to_string())?,
+            jj::JjRecognizer::new(game).map_err(|e| e.to_string())?,
         )),
         "hl" => Ok(Arc::new(
-            decktrace_hl::HlRecognizer::new(game).map_err(|e| e.to_string())?,
+            hl::HlRecognizer::new(game).map_err(|e| e.to_string())?,
         )),
         other => Err(format!("没有为游戏 {other} 注册识别器")),
     }
@@ -304,7 +305,7 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
 给 `crates/decktrace/Cargo.toml` 加：
 
 ```toml
-decktrace-hl = { path = "../decktrace-hl" }
+hl = { path = "../hl" }
 ```
 
 `main.rs` 不需要改：它通过 `list_games()` 自动检测窗口，通过
@@ -315,13 +316,13 @@ decktrace-hl = { path = "../decktrace-hl" }
 `cargo xtask package-macos` 会自动扫描：
 
 ```text
-crates/decktrace-*/assets
+crates/*/assets
 ```
 
 规则：
 
 - 只有包含 `src/profile.rs` 的游戏 crate 才会被处理
-- crate 目录后缀必须等于 `GameProfile.id`，例如 `decktrace-hl` 对应 `id = "hl"`
+- crate 目录名必须等于 `GameProfile.id`，例如 `hl` 对应 `id = "hl"`
 - 每个游戏单独拷到 `Contents/Resources/assets/<game>/`，不会互相覆盖
 - 如果目标目录重复，脚本会直接报错退出
 
@@ -340,10 +341,10 @@ Contents/Resources/assets/
 
 ## 7. 测试
 
-新增 `crates/decktrace-hl/tests/assets.rs`：
+新增 `crates/hl/tests/assets.rs`：
 
 ```rust
-use decktrace_hl::profile;
+use hl::profile;
 
 #[test]
 fn assets_are_complete() {
@@ -360,7 +361,7 @@ fn assets_are_complete() {
 }
 ```
 
-再加真实截图回归，参照 `crates/decktrace-jj/tests/golden.rs`：
+再加真实截图回归，参照 `crates/jj/tests/golden.rs`：
 
 - 截图放 `shots/hl/`
 - 使用 `HlRecognizer` 识别

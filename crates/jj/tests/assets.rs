@@ -1,4 +1,4 @@
-use decktrace_jj::profile;
+use jj::profile;
 
 #[test]
 fn all_card_assets_and_templates_exist() {

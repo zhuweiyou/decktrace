@@ -7,8 +7,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use decktrace_capture::{CaptureStream, Platform, WindowInfo};
-use decktrace_tracking::{CardTracker, Detection, GameProfile, SharedRecognizer, TrackerSnapshot};
+use capture::{CaptureStream, Platform, WindowInfo};
+use tracking::{CardTracker, Detection, GameProfile, SharedRecognizer, TrackerSnapshot};
 
 struct AutoReset {
     enabled: bool,

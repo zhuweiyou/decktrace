@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use decktrace_tracking::WindowSelector;
+use tracking::WindowSelector;
 
 use crate::types::{RawFrame, WindowInfo};
 

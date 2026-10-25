@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
-use decktrace_jj::{JjRecognizer, profile};
-use decktrace_tracking::RecognitionResult;
+use jj::{JjRecognizer, profile};
+use tracking::RecognitionResult;
 
 fn shots_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../shots")

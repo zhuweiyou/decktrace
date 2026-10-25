@@ -4,15 +4,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 
 [[bin]]
 name = "decktrace"
 path = "src/main.rs"
 
 [dependencies]
-decktrace-jj = { path = "../decktrace-jj" }
-decktrace-capture = { path = "../decktrace-capture" }
-decktrace-tracking = { path = "../decktrace-tracking" }
+jj = { path = "../jj" }
+capture = { path = "../capture" }
+tracking = { path = "../tracking" }
 anyhow.workspace = true
 clap.workspace = true
 crossbeam-channel.workspace = true

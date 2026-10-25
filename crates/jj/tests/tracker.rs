@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use decktrace_jj::profile;
-use decktrace_tracking::{CardTracker, Detection, GameProfile};
+use jj::profile;
+use tracking::{CardTracker, Detection, GameProfile};
 
 fn game() -> GameProfile {
     profile()

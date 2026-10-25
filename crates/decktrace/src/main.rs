@@ -4,13 +4,13 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use anyhow::Result;
+use capture::{Platform, WindowInfo, select_window};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
 use decktrace::{Session, SessionConfig, create_recognizer, get_game, list_games};
-use decktrace_capture::{Platform, WindowInfo, select_window};
-use decktrace_tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
+use tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
 
 mod window_state;
 
@@ -450,5 +450,5 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
 }
 
 fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(decktrace_capture::create_platform()?)
+    Ok(capture::create_platform()?)
 }

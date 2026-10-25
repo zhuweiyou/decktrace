@@ -75,7 +75,7 @@ fn package_macos() -> Result<()> {
     )
     .context("拷贝 AppIcon.icns 失败")?;
 
-    // 游戏 crate 约定：crates/decktrace-<game>/src/profile.rs 且 <game> == GameProfile.id。
+    // 游戏 crate 约定：crates/<game>/src/profile.rs 且 <game> == GameProfile.id。
     let mut games = Vec::new();
     for entry in fs::read_dir(root.join("crates")).context("读取 crates 目录失败")? {
         let path = entry?.path();
@@ -85,12 +85,10 @@ fn package_macos() -> Result<()> {
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
-        let Some(game) = name.strip_prefix("decktrace-") else {
-            continue;
-        };
         if !path.join("src/profile.rs").is_file() {
             continue;
         }
+        let game = name;
         let assets = path.join("assets");
         if !assets.is_dir() {
             bail!("游戏 {game} 缺少资源目录：{}", assets.display());

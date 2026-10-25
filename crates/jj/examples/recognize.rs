@@ -1,4 +1,4 @@
-use decktrace_jj::{JjRecognizer, profile};
+use jj::{JjRecognizer, profile};
 
 fn main() {
     let path = std::env::args().nth(1).expect("usage: recognize <image>");

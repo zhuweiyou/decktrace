@@ -752,6 +752,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "capture"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "image",
+ "screencapturekit",
+ "thiserror 2.0.21",
+ "tracking",
+]
+
+[[package]]
 name = "cc"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1007,43 +1018,13 @@ name = "decktrace"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "capture",
  "clap",
  "crossbeam-channel",
- "decktrace-capture",
- "decktrace-jj",
- "decktrace-tracking",
  "eframe",
  "image",
-]
-
-[[package]]
-name = "decktrace-capture"
-version = "0.1.0"
-dependencies = [
- "crossbeam-channel",
- "decktrace-tracking",
- "image",
- "screencapturekit",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "decktrace-jj"
-version = "0.1.0"
-dependencies = [
- "decktrace-tracking",
- "image",
- "imageproc",
- "rayon",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "decktrace-tracking"
-version = "0.1.0"
-dependencies = [
- "image",
- "serde",
+ "jj",
+ "tracking",
 ]
 
 [[package]]
@@ -2049,6 +2030,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
 dependencies = [
  "either",
+]
+
+[[package]]
+name = "jj"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "imageproc",
+ "rayon",
+ "thiserror 2.0.21",
+ "tracking",
 ]
 
 [[package]]
@@ -4127,6 +4119,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "tracking"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "serde",
 ]
 
 [[package]]
