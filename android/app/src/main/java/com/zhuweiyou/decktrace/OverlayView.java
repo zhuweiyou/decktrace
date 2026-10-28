@@ -26,7 +26,6 @@ public class OverlayView extends View {
     private static final int CARD_H = 60;
     private static final int GAP = 1;
     private static final int PAD = 4;
-    private static final int STATUS_H = 24;
     private static final int MAX_COLS = 64;
 
     private final Map<String, Bitmap> normal = new HashMap<>();
@@ -37,11 +36,11 @@ public class OverlayView extends View {
     private List<String> cards = Collections.emptyList();
     private Set<String> bombs = Collections.emptySet();
     private Set<String> bottom = Collections.emptySet();
-    private String status = "";
-    private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     public interface OnDrag {
         void onDrag(float dx, float dy);
+
+        void onDragEnd();
     }
 
     private OnDrag onDrag;
@@ -66,6 +65,12 @@ public class OverlayView extends View {
                 lastX = event.getRawX();
                 lastY = event.getRawY();
                 return true;
+            case android.view.MotionEvent.ACTION_UP:
+            case android.view.MotionEvent.ACTION_CANCEL:
+                if (onDrag != null) {
+                    onDrag.onDragEnd();
+                }
+                return true;
             default:
                 return true;
         }
@@ -80,11 +85,10 @@ public class OverlayView extends View {
         }
     }
 
-    public void setData(List<String> cards, Set<String> bombs, Set<String> bottom, String status) {
+    public void setData(List<String> cards, Set<String> bombs, Set<String> bottom) {
         this.cards = cards != null ? cards : Collections.emptyList();
         this.bombs = bombs != null ? bombs : Collections.emptySet();
         this.bottom = bottom != null ? bottom : Collections.emptySet();
-        this.status = status != null ? status : "";
         requestLayout();
         invalidate();
     }
@@ -95,7 +99,7 @@ public class OverlayView extends View {
         int cols = Math.min(count, MAX_COLS);
         int rows = (count + MAX_COLS - 1) / MAX_COLS;
         int width = cols * (CARD_W + GAP) + PAD * 2;
-        int height = rows * (CARD_H + GAP) + PAD * 2 + STATUS_H;
+        int height = rows * (CARD_H + GAP) + PAD * 2;
         setMeasuredDimension(Math.max(width, 1), height);
     }
 
@@ -120,10 +124,7 @@ public class OverlayView extends View {
                 canvas.drawBitmap(badge, null, new Rect(bx, by, bx + bw, by + bw), paint);
             }
         }
-        textPaint.setColor(0xFFFFFFFF);
-        textPaint.setTextSize(18f);
-        int rows = Math.max(1, (Math.max(cards.size(), 1) + MAX_COLS - 1) / MAX_COLS);
-        canvas.drawText(status, PAD, rows * (CARD_H + GAP) + PAD + 16, textPaint);
+
     }
 
     private Bitmap normalBitmap(String id) {

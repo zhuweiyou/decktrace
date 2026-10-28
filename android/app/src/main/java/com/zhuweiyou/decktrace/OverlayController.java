@@ -22,6 +22,7 @@ public class OverlayController {
     private WindowManager.LayoutParams lp;
     private int screenW;
     private int screenH;
+    private android.content.SharedPreferences prefs;
 
     public OverlayController(Context context) {
         this.context = context;
@@ -48,10 +49,29 @@ public class OverlayController {
                                 | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                                 | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                         PixelFormat.TRANSLUCENT);
-                lp.gravity = Gravity.TOP | Gravity.LEFT;
-                lp.x = Math.max(0, screenW - 460);
-                lp.y = 0;
-                v.setOnDrag(this::move);
+                prefs = context.getSharedPreferences("overlay_pos", Context.MODE_PRIVATE);
+                boolean saved = prefs.getBoolean("has", false);
+                if (saved) {
+                    lp.gravity = Gravity.TOP | Gravity.LEFT;
+                    lp.x = prefs.getInt("x", 0);
+                    lp.y = prefs.getInt("y", 0);
+                } else {
+                    // 默认顶部居中（宽度变化也会自动居中）
+                    lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                    lp.x = 0;
+                    lp.y = 0;
+                }
+                v.setOnDrag(new OverlayView.OnDrag() {
+                    @Override
+                    public void onDrag(float dx, float dy) {
+                        move(dx, dy);
+                    }
+
+                    @Override
+                    public void onDragEnd() {
+                        savePos();
+                    }
+                });
                 wm.addView(v, lp);
                 view = v;
             } catch (Throwable t) {
@@ -60,26 +80,39 @@ public class OverlayController {
         });
     }
 
-    /** 拖动悬浮窗：按增量移动窗口位置。 */
+    /** 拖动悬浮窗：按增量移动窗口位置（首次拖动从居中切到绝对坐标）。 */
     private void move(float dx, float dy) {
         if (view == null || lp == null) {
             return;
         }
+        int[] loc = new int[2];
+        view.getLocationOnScreen(loc);
         int vw = view.getWidth() > 0 ? view.getWidth() : 460;
         int vh = view.getHeight() > 0 ? view.getHeight() : 130;
-        lp.x = Math.max(0, Math.min(lp.x + Math.round(dx), Math.max(0, screenW - vw)));
-        lp.y = Math.max(0, Math.min(lp.y + Math.round(dy), Math.max(0, screenH - vh)));
+        int nx = Math.max(0, Math.min(loc[0] + Math.round(dx), Math.max(0, screenW - vw)));
+        int ny = Math.max(0, Math.min(loc[1] + Math.round(dy), Math.max(0, screenH - vh)));
+        lp.gravity = Gravity.TOP | Gravity.LEFT;
+        lp.x = nx;
+        lp.y = ny;
         try {
             wm.updateViewLayout(view, lp);
         } catch (Throwable ignored) {
         }
     }
 
+    /** 拖动结束保存坐标，下次沿用到该位置。 */
+    private void savePos() {
+        if (prefs == null || lp == null) {
+            return;
+        }
+        prefs.edit().putBoolean("has", true).putInt("x", lp.x).putInt("y", lp.y).apply();
+    }
+
     public void update(String snapshot) {
         Snapshot s = Snapshot.parse(snapshot);
         ui.post(() -> {
             if (view != null) {
-                view.setData(s.cards, s.bombs, s.bottom, s.status());
+                view.setData(s.cards, s.bombs, s.bottom);
             }
         });
     }
