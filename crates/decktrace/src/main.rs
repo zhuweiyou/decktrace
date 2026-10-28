@@ -36,6 +36,17 @@ struct Args {
     fps: f32,
     #[arg(long)]
     no_auto_reset: bool,
+    #[arg(
+        long,
+        default_value = "auto",
+        value_parser = ["auto", "adb"],
+        help = "采集后端：auto（本机窗口）或 adb（安卓真机调试）"
+    )]
+    capture: String,
+    #[arg(long, help = "adb 截图裁剪区域 x,y,w,h（截图像素，可选，默认整屏）")]
+    adb_crop: Option<String>,
+    #[arg(long, help = "adb 设备序列号（多设备时指定）")]
+    adb_serial: Option<String>,
 }
 
 enum Message {
@@ -99,6 +110,22 @@ fn window_selector(args: &Args, game: &GameProfile) -> WindowSelector {
 /// 自动检测当前打开的游戏窗口。仅有一个匹配时直接使用；
 /// 多个匹配时按注册顺序取第一个；没有匹配时返回 None，由 worker 重试。
 fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfile, WindowInfo)>> {
+    // adb 后端只有一块“设备屏幕”，无法按窗口标题匹配；直接按 --game 选定游戏。
+    if platform.name() == "adb" {
+        let game_id = if args.game == "auto" { "hlddz-mobile" } else { args.game.as_str() };
+        let game = get_game(game_id).map_err(anyhow::Error::msg)?;
+        let windows = platform.window_service().list_windows(false)?;
+        let window = windows
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("adb 模式未发现可用屏幕"))?;
+        eprintln!(
+            "[adb] 采集游戏 {}（{}）；adb 模式无法自动判定前台游戏，可用 --game 指定",
+            game.name, game.id
+        );
+        return Ok(Some((game, window)));
+    }
+
     let windows = platform.window_service().list_windows(false)?;
 
     if args.game != "auto" {
@@ -145,7 +172,7 @@ fn spawn_worker(
         .name("capture".to_string())
         .spawn(move || {
             let result = (|| -> Result<()> {
-                let platform = create_platform()?;
+                let platform = make_platform(&args)?;
                 let (game, window) = loop {
                     if stop.load(Ordering::Relaxed) {
                         return Ok(());
@@ -163,6 +190,8 @@ fn spawn_worker(
                 };
                 let recognizer = create_recognizer(&game).map_err(anyhow::Error::msg)?;
                 game_slot.set(game.clone()).ok();
+                // adb 单帧截图约 2s，2 帧确认的有效期(1.6s)必然过期，故 adb 调试用 1 帧即入账。
+                let min_hits = if args.capture == "adb" { 1 } else { args.min_hits };
                 let mut session = Session::new(
                     platform.as_ref(),
                     game,
@@ -170,7 +199,7 @@ fn spawn_worker(
                     recognizer,
                     SessionConfig {
                         fps: args.fps,
-                        min_hits: args.min_hits,
+                        min_hits,
                         auto_reset: !args.no_auto_reset,
                         ..SessionConfig::default()
                     },
@@ -480,8 +509,14 @@ fn rank_of(card_id: &str, game: &GameProfile) -> String {
     card_id[..card_id.len() - 1].to_string()
 }
 
-fn create_platform() -> Result<Box<dyn Platform>> {
-    Ok(capture::create_platform()?)
+fn make_platform(args: &Args) -> Result<Box<dyn Platform>> {
+    match args.capture.as_str() {
+        "adb" => Ok(Box::new(capture::adb::AdbPlatform::new(
+            args.adb_serial.clone(),
+            args.adb_crop.clone(),
+        )?)),
+        _ => Ok(capture::create_platform()?),
+    }
 }
 
 /// 开发期直接 `cargo run` 时也给 Dock 一个图标；打包后以 bundle 图标为准。

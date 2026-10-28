@@ -6,6 +6,9 @@ mod types;
 pub use traits::{CaptureError, CaptureStream, Platform, Result, WindowService, select_window};
 pub use types::{RawFrame, WindowInfo};
 
+#[cfg(not(target_os = "android"))]
+pub mod adb;
+
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "windows")]

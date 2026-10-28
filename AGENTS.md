@@ -13,6 +13,7 @@
   - [新增游戏](docs/adding-a-game.md)
   - [打包与发布](docs/packaging.md)
   - [Windows 采集路线](docs/windows.md)
+  - [安卓端与 ADB 调试](docs/android.md)
   - [开发排障](docs/troubleshooting.md)
 
 规则：
@@ -43,7 +44,8 @@ crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer、CardTracker
   jjddz/       # JJ斗地主适配：profile、templates、recognition
   hlddz/       # 欢乐斗地主适配：profile、templates、recognition
-  capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现
+  hlddz-mobile/ # 欢乐斗地主手机横屏小程序适配（独立于 hlddz，模板/区域单独标定）
+  capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
   decktrace/   # GUI + Session + registry（唯一发布产物）
 xtask/         # cargo xtask package-macos / install-macos / icon
 docs/          # 详细开发文档
@@ -56,11 +58,13 @@ tracking
   ↑        ↑         ↑
 jjddz   capture   decktrace（应用层）
 hlddz
+hlddz-mobile
 ```
 
 规则：
 
 - 每个游戏一个独立 crate：`crates/<id>`，目录名必须等于 `GameProfile.id`。
+- 手机版单独开 crate（如 `hlddz-mobile`），**不要为兼容手机去改 PC 版 profile**；模板/区域/比例按平台各自标定。
 - 游戏 crate 必须有 `src/profile.rs` 和 `assets/`（识别模板）；打包靠这个约定扫描。
 - GUI 牌面 `cards/` 是应用资源，放在 `crates/decktrace/assets/cards`，所有游戏共用。
 - 所有内部包 `publish = false`。

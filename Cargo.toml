@@ -4,6 +4,7 @@ members = [
     "crates/tracking",
     "crates/jjddz",
     "crates/hlddz",
+    "crates/hlddz-mobile",
     "crates/capture",
     "crates/decktrace",
     "xtask",
