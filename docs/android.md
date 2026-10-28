@@ -62,7 +62,22 @@ cargo run --release -p hlddz-mobile --example check -- frame.png
 - adb 帧率低（~0.5fps），`tracker_probe`/GUI 在 adb 模式下强制 `min_hits=1`；
   端上高帧率才用 2 帧确认。
 - 慢帧下自动重置（依赖 `absent_seconds`）不可靠，调试多局建议手动重置。
-- 底牌字号很小，偶发花色误判（如 `2♦`→`2♥`），需针对性调 suit 分类阈值。
+- 底牌字号很小，红桃/方块字形相近，是**重点回归风险点**（见下）。
+
+## 花色小字复核（2780×1264）
+
+曾怀疑底牌 `2♦` 被识别成 `2♥`。放大底牌区核对后确认：该局三张底牌实为
+`2♥ A♦ 6♠`，识别器输出完全一致（这局是地主，底牌同时出现在手牌中，
+同一张牌在两处出现属正常）。**结论：不是误判**，之前是把小图红桃误看成方块。
+小字 D/H 仍列为回归重点，后续多抓样本验证。
+
+## 工具链（已就绪）
+
+- JDK：`openjdk@21`（`/opt/homebrew/opt/openjdk@21`）
+- Android SDK：`/opt/homebrew/share/android-commandlinetools`
+  （`platforms;android-34`、`build-tools;34.0.0`、`ndk;27.2.12479018`、`platform-tools`）
+- Rust 目标：`aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`
+- `cargo-ndk 4.1.2`
 
 ## 阶段二/三 计划
 
@@ -70,4 +85,3 @@ cargo run --release -p hlddz-mobile --example check -- frame.png
 2. Kotlin：`MediaProjection` + `VirtualDisplay` + `ImageReader` 取帧，
    JNI 送进 Rust，返回快照 JSON；模板资产打包解压到 `filesDir`。
 3. 原生 `WindowManager` 悬浮窗，用 `cards/` 的 54 张 PNG 绘制牌条。
-4. 需要本机先装 JDK + Android SDK/NDK + `cargo-ndk`（当前未装）。
