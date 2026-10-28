@@ -51,6 +51,8 @@ public class CaptureService extends Service {
     private long handle = 0;
     private long lastProcessMs = 0;
     private int frameCount = 0;
+    private long capStartMs = 0;
+    private int capCount = 0;
     private int width, height, density;
     private boolean capturing = false;
     private volatile boolean running = false;
@@ -245,6 +247,17 @@ public class CaptureService extends Service {
                     return;
                 }
                 long now = SystemClock.elapsedRealtime();
+                capCount++;
+                if (capStartMs == 0) {
+                    capStartMs = now;
+                }
+                if (now - capStartMs >= 2000) {
+                    double sec = (now - capStartMs) / 1000.0;
+                    android.util.Log.d("decktrace", "capture fps=" + (capCount / sec)
+                            + " frames=" + capCount + " cost=" + sec + "s");
+                    capStartMs = now;
+                    capCount = 0;
+                }
                 if (now - lastProcessMs < 80) { // 约 12fps，识别要占 CPU
                     return;
                 }
