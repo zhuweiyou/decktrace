@@ -85,3 +85,46 @@ cargo run --release -p hlddz-mobile --example check -- frame.png
 2. Kotlin：`MediaProjection` + `VirtualDisplay` + `ImageReader` 取帧，
    JNI 送进 Rust，返回快照 JSON；模板资产打包解压到 `filesDir`。
 3. 原生 `WindowManager` 悬浮窗，用 `cards/` 的 54 张 PNG 绘制牌条。
+
+## 阶段二：真机 APK（已产出）
+
+工程在 `android/`（Java + 原生 View，无 AndroidX）：
+
+- `MainActivity`：竖屏配置页，只有「授权悬浮窗」「开始采集」两个按钮。
+- `CaptureService`：前台服务（`mediaProjection` 类型），`MediaProjection` + `VirtualDisplay`
+  + `ImageReader` 取帧 → `NativeBridge.pushFrame` → 刷新悬浮窗。只在横屏采集（竖屏视为不在游戏中，
+  释放采集并隐藏悬浮窗；旋转用 `DisplayManager` 监听自适应）。
+- `OverlayView`：顶部**单行**记牌条，可拖动；炸弹反色、底牌“底”印；底部一行状态
+  `armed / seen / 剩 / det / 底`。加了 `FLAG_SECURE`（录屏里不把自己的牌拍进去）。
+- JNI：`crates/decktrace-jni` 编 `libdecktrace_core.so`（crate-type cdylib，
+  lib 名 `decktrace_core`），对外 `create/pushFrame/reset/destroy`。
+- 模板/牌面资源直接复用 `crates/hlddz-mobile/assets` 与 `crates/decktrace/assets`
+  （Gradle `sourceSets.assets.srcDirs`）。
+
+构建：
+
+```bash
+# 1) Rust .so（arm64）
+export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH"
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
+cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p decktrace-jni
+
+# 2) APK
+cd android
+JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+资源/图标：`android/app/src/main/res/mipmap-*/ic_launcher.png` 由 `crates/decktrace/assets/AppIcon.png` 生成。
+
+## 重要已知问题：ColorOS 屏蔽微信画面
+
+在 OnePlus/ColorOS（PKR110，Android 14）上，用 MediaProjection 采集时系统会提示
+「应用内容已屏蔽 · 微信内容对方不可见」，**把微信画面屏蔽成黑屏**，导致识别 `det=0`。
+`adb exec-out screencap` 是特权通道，能看到画面，所以容易误判为识别问题。
+
+- 现场可点提示里的「解除屏蔽」放行；但这是系统/微信的隐私保护，不稳定。
+- 结论：采集链路已跑通（帧尺寸/stride/送入识别均正常），但**微信小程序这条路线受系统限制**。
+- 决策：APK 保持「单应用采集 + 单行记牌条 + 可拖动」，先不做微信特化；
+  下一步做**非微信（独立 App / 可正常录屏）的游戏版本**再端到端验证。

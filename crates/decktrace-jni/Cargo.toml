@@ -1,0 +1,17 @@
+[package]
+name = "decktrace-jni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "decktrace_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+tracking = { path = "../tracking" }
+hlddz-mobile = { path = "../hlddz-mobile" }
+image.workspace = true
+jni = "0.21"

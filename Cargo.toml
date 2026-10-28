@@ -5,6 +5,7 @@ members = [
     "crates/jjddz",
     "crates/hlddz",
     "crates/hlddz-mobile",
+    "crates/decktrace-jni",
     "crates/capture",
     "crates/decktrace",
     "xtask",

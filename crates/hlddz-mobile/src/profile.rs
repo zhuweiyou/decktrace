@@ -32,7 +32,15 @@ fn asset_root() -> PathBuf {
 }
 
 pub fn profile() -> GameProfile {
-    let assets = asset_root();
+    build(asset_root())
+}
+
+/// 用指定资源根目录构建 profile（Android/JNI 用：assets 解压到 filesDir 后传入）。
+pub fn profile_with_assets(assets: PathBuf) -> GameProfile {
+    build(assets)
+}
+
+fn build(assets: PathBuf) -> GameProfile {
     let mut rank_totals = BTreeMap::new();
     for (rank, total) in [
         ("BJ", 1u8),

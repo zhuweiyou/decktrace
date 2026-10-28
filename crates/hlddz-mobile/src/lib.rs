@@ -6,5 +6,5 @@
 pub mod profile;
 pub mod recognition;
 
-pub use profile::profile;
+pub use profile::{profile, profile_with_assets};
 pub use recognition::{HlddzRecognizer, RecognitionError};

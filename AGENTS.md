@@ -47,6 +47,8 @@ crates/
   hlddz-mobile/ # 欢乐斗地主手机横屏小程序适配（独立于 hlddz，模板/区域单独标定）
   capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
   decktrace/   # GUI + Session + registry（唯一发布产物）
+  decktrace-jni/ # Android JNI 桥（cdylib -> libdecktrace_core.so）
+android/       # 安卓 APK 工程（Java：MediaProjection 采集 + 悬浮窗）
 xtask/         # cargo xtask package-macos / install-macos / icon
 docs/          # 详细开发文档
 ```
