@@ -11,7 +11,11 @@ build = "build.rs"
 tracking = { path = "../tracking" }
 crossbeam-channel.workspace = true
 image.workspace = true
+rayon.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+image.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 screencapturekit = { workspace = true, features = ["macos_14_0"] }
@@ -23,5 +27,6 @@ windows = { version = "0.62", features = [
     "Win32_Graphics_Gdi",
     "Win32_Storage_Xps",
     "Win32_System_Threading",
+    "Win32_UI_HiDpi",
     "Win32_UI_WindowsAndMessaging",
 ] }

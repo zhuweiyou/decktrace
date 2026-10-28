@@ -2,27 +2,45 @@
 
 ## 当前状态
 
-`crates/capture/src/windows.rs` 是 **experimental** 实现：
+`crates/capture/src/windows.rs` 是实验实现，已在真实 Windows（11 22631）实测：
 
 ```text
 Win32 窗口枚举
-→ GetClientRect / DWM 扩展边界
+→ GetClientRect（进程设为 Per-Monitor-V2 DPI 感知，拿物理像素）
 → PrintWindow(PW_CLIENTONLY | PW_RENDERFULLCONTENT)
 → 失败退回屏幕 BitBlt
-→ GetDIBits BGRA → RGB
-→ 按 FPS 轮询
+→ 直接画进可复用的 32 位自上而下 DIB section（不再 GetDIBits 二次拷贝）
+→ BGRA → RGB（rayon 并行）→ RawFrame
 ```
 
-已通过：
+关键点：
+
+- **被遮挡/后台窗口**：`PrintWindow` 让窗口自己重绘到内存位图；实测整屏被另一不透明窗口遮挡时，
+  仍能截到目标窗口的完整内容（微信整屏覆盖测试通过）。
+- **局限**：部分硬件加速 / DirectX 独占全屏窗口 `PrintWindow` 可能返回黑屏；此时退回的屏幕
+  `BitBlt` 只取屏幕可见像素，被遮挡会拿到上层画面。这类窗口需要 WGC（见下）。
+- **DPI**：`PlatformImpl::new` 尽力设置 Per-Monitor-V2 感知，避免缩放显示器下客户区被虚拟化、
+  截图被裁剪。
+- **帧率**：`read()` 用「上一时间槽 + interval」推进，采集耗时不叠加进周期（否则 15fps 只能跑 ~12fps）。
+
+已实测通过：
+
+- 窗口模式：Chrome / 微信 / 设置(UWP) / 本程序 GUI 均能正确截图
+- 被遮挡：整屏不透明覆盖下仍截到目标窗口内容
+- 性能：1920×1152 单帧 ~17ms（连续抓帧约 60FPS）；15fps 节流实测 15.2FPS
+
+验证命令：
 
 ```bash
-cargo check --target x86_64-pc-windows-gnu -p decktrace
+cargo test -p capture --release                                     # 单元 + 真实窗口截图集成测试
+cargo run --release -p capture --example windows-smoke -- "微信"     # 截一帧存 windows-smoke.png
+cargo run --release -p capture --example fps-bench -- "微信" 120             # 连续抓帧吞吐
+cargo run --release -p capture --example fps-bench -- "微信" 90 --paced 15  # 验证节流帧率
 ```
 
 未完成：
 
-- 真实 Windows 游戏窗口验证
-- 全屏/无边框/硬件加速验证
+- 全屏/独占全屏/硬件加速游戏窗口的 WGC 验证（GDI 可能黑屏）
 - Windows 安装包
 
 Wine 只能做有限冒烟测试；本机 Wine 无法启动该 x86_64 PE，不能据此判断可用。

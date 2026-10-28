@@ -12,11 +12,14 @@ use tracking::WindowSelector;
 use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Dwm::{DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Gdi::{
-    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, ClientToScreen, CreateCompatibleBitmap,
-    CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, HGDIOBJ,
+    BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, ClientToScreen, CreateCompatibleDC,
+    CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HBITMAP, HDC, HGDIOBJ,
     ReleaseDC, SRCCOPY, SelectObject,
 };
 use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
+use windows::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetProcessDpiAwarenessContext,
+};
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
@@ -37,6 +40,11 @@ pub struct WindowsPlatform {
 
 impl WindowsPlatform {
     pub fn new() -> Result<Self> {
+        // 让 GetClientRect / 截图使用物理像素，避免缩放显示器下客户区被虚拟化、
+        // 截图被裁剪。GUI（winit）通常已设置，重复调用失败无副作用，忽略即可。
+        unsafe {
+            let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        }
         Ok(Self {
             windows: WindowsWindowService,
         })
@@ -189,6 +197,7 @@ pub struct WindowsCaptureStream {
     started: Instant,
     next: Instant,
     seq: u64,
+    surface: Option<GdiSurface>,
 }
 
 impl WindowsCaptureStream {
@@ -204,6 +213,41 @@ impl WindowsCaptureStream {
             started: now,
             next: now,
             seq: 0,
+            surface: None,
+        })
+    }
+
+    /// 忽略帧率节流、立刻抓一帧。用于性能基准与冒烟测试。
+    pub fn grab_now(&mut self) -> Result<RawFrame> {
+        self.capture_frame()
+    }
+
+    fn capture_frame(&mut self) -> Result<RawFrame> {
+        let hwnd = HWND(self.hwnd as usize as *mut c_void);
+        if unsafe { IsIconic(hwnd).as_bool() } {
+            return Err(CaptureError::Capture("游戏窗口已最小化".to_string()));
+        }
+        let (width, height) = client_size(hwnd)?;
+
+        // 复用同一块 DIB / 内存 DC；窗口尺寸变化时重建。
+        let stale = self
+            .surface
+            .as_ref()
+            .is_none_or(|s| s.width != width || s.height != height);
+        if stale {
+            self.surface = Some(GdiSurface::new(width, height)?);
+        }
+        let surface = self.surface.as_mut().expect("surface 已初始化");
+
+        surface.grab(hwnd)?;
+        let image = surface.to_rgb()?;
+        self.seq += 1;
+        Ok(RawFrame {
+            seq: self.seq,
+            timestamp: self.started.elapsed().as_secs_f64(),
+            width: image.width(),
+            height: image.height(),
+            image,
         })
     }
 }
@@ -228,27 +272,37 @@ impl CaptureStream for WindowsCaptureStream {
             }
         }
 
-        let image = capture_window(self.hwnd)?;
-        self.seq += 1;
-        self.next = Instant::now() + self.interval;
-        Ok(Some(RawFrame {
-            seq: self.seq,
-            timestamp: self.started.elapsed().as_secs_f64(),
-            width: image.width(),
-            height: image.height(),
-            image,
-        }))
+        let frame = self.capture_frame()?;
+        // 固定节拍推进：用上一个时间槽 + interval，而不是“采完 + interval”。
+        // 否则每帧的采集耗时（~17ms）会累加到周期上，15fps 实际只能跑 ~12fps。
+        self.next += self.interval;
+        if self.next <= Instant::now() {
+            // 采集本身超过一个间隔，已追不上节拍：重新对齐，避免连续补帧。
+            self.next = Instant::now() + self.interval;
+        }
+        Ok(Some(frame))
     }
 
-    fn stop(&mut self) {}
+    fn stop(&mut self) {
+        self.surface = None;
+    }
 }
 
-fn capture_window(hwnd: u64) -> Result<RgbImage> {
+/// 抓取指定窗口客户区的一帧彩色图像（一次性，不复用资源）。
+///
+/// 公开用于冒烟测试；实时采集请用 [`WindowsCaptureStream`]。
+pub fn capture_window(hwnd: u64) -> Result<RgbImage> {
     let hwnd = HWND(hwnd as usize as *mut c_void);
     if unsafe { IsIconic(hwnd).as_bool() } {
         return Err(CaptureError::Capture("游戏窗口已最小化".to_string()));
     }
+    let (width, height) = client_size(hwnd)?;
+    let mut surface = GdiSurface::new(width, height)?;
+    surface.grab(hwnd)?;
+    surface.to_rgb()
+}
 
+fn client_size(hwnd: HWND) -> Result<(u32, u32)> {
     let mut client = RECT::default();
     unsafe { GetClientRect(hwnd, &mut client) }
         .map_err(|err| CaptureError::Capture(format!("读取客户区失败：{err}")))?;
@@ -257,93 +311,181 @@ fn capture_window(hwnd: u64) -> Result<RgbImage> {
     if width == 0 || height == 0 {
         return Err(CaptureError::Capture("窗口客户区为空".to_string()));
     }
+    Ok((width, height))
+}
 
-    unsafe {
-        let screen_dc = GetDC(None);
-        if screen_dc.0.is_null() {
-            return Err(CaptureError::Capture("获取屏幕 DC 失败".to_string()));
-        }
-        let mem_dc = CreateCompatibleDC(None);
-        if mem_dc.0.is_null() {
-            ReleaseDC(None, screen_dc);
-            return Err(CaptureError::Capture("创建内存 DC 失败".to_string()));
-        }
-        let bitmap = CreateCompatibleBitmap(screen_dc, width as i32, height as i32);
-        if bitmap.0.is_null() {
-            let _ = DeleteDC(mem_dc);
-            ReleaseDC(None, screen_dc);
-            return Err(CaptureError::Capture("创建位图失败".to_string()));
-        }
-        let old = SelectObject(mem_dc, bitmap.into());
+/// 一块可复用的 GDI 抓帧表面：内存 DC + 32 位自上而下 DIB。
+///
+/// DIB section 直接暴露像素指针，`PrintWindow`/`BitBlt` 画进来后无需
+/// `GetDIBits` 再拷一次；配合跨帧复用，避免每帧重建位图和分配大缓冲。
+struct GdiSurface {
+    width: u32,
+    height: u32,
+    mem_dc: HDC,
+    bitmap: HBITMAP,
+    old: HGDIOBJ,
+    bits: *mut u8,
+}
 
-        // PrintWindow 能拿到被遮挡窗口；部分硬件加速窗口会失败，退回屏幕 BitBlt。
-        let printed = PrintWindow(hwnd, mem_dc, PRINT_WINDOW_FLAGS(3)).as_bool();
-        if !printed {
-            let mut origin = POINT::default();
-            let has_origin = ClientToScreen(hwnd, &mut origin).as_bool();
-            if !has_origin
-                || BitBlt(
-                    mem_dc,
-                    0,
-                    0,
-                    width as i32,
-                    height as i32,
-                    Some(screen_dc),
-                    origin.x,
-                    origin.y,
-                    SRCCOPY,
-                )
-                .is_err()
-            {
-                SelectObject(mem_dc, old);
+// GDI 句柄与 DIB 指针只随采集流在线程间移动，从不并发共享，故可 Send。
+unsafe impl Send for GdiSurface {}
+
+impl GdiSurface {
+    fn new(width: u32, height: u32) -> Result<Self> {
+        unsafe {
+            let mem_dc = CreateCompatibleDC(None);
+            if mem_dc.0.is_null() {
+                return Err(CaptureError::Capture("创建内存 DC 失败".to_string()));
+            }
+            let mut info = BITMAPINFO::default();
+            info.bmiHeader = BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width as i32,
+                biHeight: -(height as i32), // 负高度 = 自上而下，行序与图像一致
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            };
+            let mut bits: *mut c_void = std::ptr::null_mut();
+            let bitmap = match CreateDIBSection(
+                Some(mem_dc),
+                &info,
+                DIB_RGB_COLORS,
+                &mut bits,
+                None,
+                0,
+            ) {
+                Ok(bitmap) => bitmap,
+                Err(err) => {
+                    let _ = DeleteDC(mem_dc);
+                    return Err(CaptureError::Capture(format!("创建 DIB 位图失败：{err}")));
+                }
+            };
+            if bits.is_null() {
                 let _ = DeleteObject(HGDIOBJ(bitmap.0));
                 let _ = DeleteDC(mem_dc);
-                ReleaseDC(None, screen_dc);
-                return Err(CaptureError::Capture(
-                    "PrintWindow/BitBlt 均失败".to_string(),
-                ));
+                return Err(CaptureError::Capture("DIB 像素指针为空".to_string()));
             }
+            let old = SelectObject(mem_dc, bitmap.into());
+            Ok(Self {
+                width,
+                height,
+                mem_dc,
+                bitmap,
+                old,
+                bits: bits.cast(),
+            })
         }
+    }
 
-        let mut buffer = vec![0u8; width as usize * height as usize * 4];
-        let mut info = BITMAPINFO::default();
-        info.bmiHeader = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width as i32,
-            biHeight: -(height as i32),
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        };
-        let lines = GetDIBits(
-            mem_dc,
-            bitmap,
-            0,
-            height,
-            Some(buffer.as_mut_ptr() as *mut c_void),
-            &mut info,
-            DIB_RGB_COLORS,
-        );
-        SelectObject(mem_dc, old);
-        let _ = DeleteObject(HGDIOBJ(bitmap.0));
-        let _ = DeleteDC(mem_dc);
-        ReleaseDC(None, screen_dc);
-
-        if lines <= 0 {
-            return Err(CaptureError::Capture("读取位图失败".to_string()));
+    /// 把窗口内容画进 DIB：优先 `PrintWindow`（可抓被遮挡窗口），失败退回屏幕 `BitBlt`。
+    fn grab(&mut self, hwnd: HWND) -> Result<()> {
+        unsafe {
+            let t_print = Instant::now();
+            let printed = PrintWindow(hwnd, self.mem_dc, PRINT_WINDOW_FLAGS(3)).as_bool();
+            let print_elapsed = t_print.elapsed();
+            if !printed {
+                let screen_dc = GetDC(None);
+                if screen_dc.0.is_null() {
+                    return Err(CaptureError::Capture("获取屏幕 DC 失败".to_string()));
+                }
+                let mut origin = POINT::default();
+                let has_origin = ClientToScreen(hwnd, &mut origin).as_bool();
+                let copied = has_origin
+                    && BitBlt(
+                        self.mem_dc,
+                        0,
+                        0,
+                        self.width as i32,
+                        self.height as i32,
+                        Some(screen_dc),
+                        origin.x,
+                        origin.y,
+                        SRCCOPY,
+                    )
+                    .is_ok();
+                ReleaseDC(None, screen_dc);
+                if !copied {
+                    return Err(CaptureError::Capture(
+                        "PrintWindow/BitBlt 均失败".to_string(),
+                    ));
+                }
+            }
+            if std::env::var_os("DECKTRACE_CAPTURE_PROFILE").is_some() {
+                eprintln!(
+                    "[capture] {}x{} print={:.2}ms{}",
+                    self.width,
+                    self.height,
+                    print_elapsed.as_secs_f64() * 1000.0,
+                    if printed { "" } else { " (bitblt 回退)" }
+                );
+            }
+            Ok(())
         }
-        bgra_to_rgb(&buffer, width, height)
+    }
+
+    fn to_rgb(&self) -> Result<RgbImage> {
+        let len = self.width as usize * self.height as usize * 4;
+        // SAFETY: bits 指向 CreateDIBSection 分配的 width*height*4 字节，生命周期同 self。
+        let src = unsafe { std::slice::from_raw_parts(self.bits, len) };
+        bgra_to_rgb(src, self.width, self.height)
             .ok_or_else(|| CaptureError::Capture("BGRA 转 RGB 失败".to_string()))
     }
 }
 
-fn bgra_to_rgb(buffer: &[u8], width: u32, height: u32) -> Option<RgbImage> {
-    let mut data = vec![0u8; width as usize * height as usize * 3];
-    let (dst_pixels, _) = data.as_chunks_mut::<3>();
-    let (src_pixels, _) = buffer.as_chunks::<4>();
-    for (dst, src) in dst_pixels.iter_mut().zip(src_pixels) {
-        *dst = [src[2], src[1], src[0]];
+impl Drop for GdiSurface {
+    fn drop(&mut self) {
+        unsafe {
+            SelectObject(self.mem_dc, self.old);
+            let _ = DeleteObject(HGDIOBJ(self.bitmap.0));
+            let _ = DeleteDC(self.mem_dc);
+        }
     }
+}
+
+/// BGRA → RGB，按 3 字节像素并行重排。缓冲区由调用方保证 `>= w*h*4`。
+fn bgra_to_rgb(buffer: &[u8], width: u32, height: u32) -> Option<RgbImage> {
+    use rayon::prelude::*;
+
+    let pixels = width as usize * height as usize;
+    if buffer.len() < pixels * 4 {
+        return None;
+    }
+    let mut data = Vec::with_capacity(pixels * 3);
+    // SAFETY: 下面的 par_chunks_mut 会完整写入全部 pixels*3 字节后再返回。
+    unsafe {
+        data.set_len(pixels * 3);
+    }
+    data.par_chunks_mut(3)
+        .zip(buffer[..pixels * 4].par_chunks(4))
+        .for_each(|(dst, src)| {
+            dst[0] = src[2];
+            dst[1] = src[1];
+            dst[2] = src[0];
+        });
     RgbImage::from_raw(width, height, data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bgra_to_rgb;
+
+    #[test]
+    fn bgra_to_rgb_swaps_channel_order() {
+        // 两个像素：BGRA=(10,20,30,255) 和 (1,2,3,255)，期望 RGB=(30,20,10)/(3,2,1)。
+        let bgra = [10u8, 20, 30, 255, 1, 2, 3, 255];
+        let image = bgra_to_rgb(&bgra, 2, 1).expect("转换应成功");
+        assert_eq!(image.width(), 2);
+        assert_eq!(image.height(), 1);
+        assert_eq!(&image.get_pixel(0, 0).0, &[30, 20, 10]);
+        assert_eq!(&image.get_pixel(1, 0).0, &[3, 2, 1]);
+    }
+
+    #[test]
+    fn bgra_to_rgb_rejects_short_buffer() {
+        // 需要 4*4=16 字节，只给 8 字节应返回 None 而不是越界。
+        let short = [0u8; 8];
+        assert!(bgra_to_rgb(&short, 2, 2).is_none());
+    }
 }
