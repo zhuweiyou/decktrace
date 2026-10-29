@@ -28,8 +28,6 @@ struct Engine {
     between_rounds: bool,
     /// 结算判定防抖计数。
     settle_hits: u32,
-    /// 资源目录（用于诊断落帧）。
-    assets: PathBuf,
 }
 
 #[unsafe(no_mangle)]
@@ -103,7 +101,6 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
         empty_since: None,
         between_rounds: false,
         settle_hits: 0,
-        assets: PathBuf::from(&assets),
     };
     Box::into_raw(Box::new(Mutex::new(engine))) as jlong
 }
@@ -215,23 +212,8 @@ fn push_frame_impl(
         } else {
             engine.empty_since = None;
         }
-        let committed = if engine.hand_started && !engine.between_rounds {
-            engine.tracker.observe(&recognition.detections, now)
-        } else {
-            Vec::new()
-        };
-        if !committed.is_empty() {
-            let _ = image.save(engine.assets.join("last_commit.png"));
-            let text: String = committed
-                .iter()
-                .map(|d| format!("{}@({},{},{},{})s{:.2}", d.card_id(), d.bbox.0, d.bbox.1, d.bbox.2, d.bbox.3, d.score))
-                .collect::<Vec<_>>()
-                .join("; ");
-            let _ = std::fs::write(engine.assets.join("last_commit.txt"), format!("{text}\n"));
-            if committed.iter().any(|d| d.rank == "BJ" || d.rank == "SJ") {
-                let _ = image.save(engine.assets.join("joker_commit.png"));
-                let _ = std::fs::write(engine.assets.join("joker_commit.txt"), text);
-            }
+        if engine.hand_started && !engine.between_rounds {
+            engine.tracker.observe(&recognition.detections, now);
         }
     } else {
         engine.tracker.observe(&recognition.detections, now);

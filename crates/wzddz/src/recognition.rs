@@ -135,11 +135,13 @@ impl WzddzRecognizer {
             .filter(|d| {
                 let cx = d.bbox.0 as f32 + d.bbox.2 as f32 / 2.0;
                 let cy = d.bbox.1 as f32 + d.bbox.3 as f32 / 2.0;
-                // 手牌带或出牌区（排除最顶部 UI / 左右角色区）
-                let pos_ok = cy > height as f32 * 0.12
-                    && cy < height as f32 * 0.98
-                    && cx > width as f32 * 0.12
-                    && cx < width as f32 * 0.90;
+                // 王只会出现在「手牌带左侧（手牌按大小排，王在最左）」或「中间出牌区」，
+                // 据此排除左右角色身体/服装图案造成的竖排误判。
+                let cyr = cy / height as f32;
+                let cxr = cx / width as f32;
+                let in_hand = cyr > 0.66 && cyr < 0.96 && cxr > 0.10 && cxr < 0.58;
+                let in_play = cyr > 0.16 && cyr < 0.60 && cxr > 0.22 && cxr < 0.82;
+                let pos_ok = in_hand || in_play;
                 if !pos_ok {
                     return false;
                 }
