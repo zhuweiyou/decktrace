@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
 import android.net.Uri;
 import android.os.Build;
@@ -13,20 +15,30 @@ import android.view.Gravity;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 /**
- * 入口页：
- * 第一组：悬浮窗授权 + 停止；
- * 第二组：选择游戏（小程序欢乐斗地主 / 王者荣耀斗地主）并开始截屏。
+ * 入口页：深色卡片式界面。
+ * 第一组：悬浮窗授权 + 停止；第二组：选择游戏并开始截屏。
  */
 public class MainActivity extends Activity {
     private static final int REQ_CAPTURE = 1001;
     private static final int REQ_NOTIF = 1002;
 
+    private static final int BG_TOP = 0xFF0C1018;
+    private static final int BG_BOTTOM = 0xFF141C29;
+    private static final int CARD_BG = 0xFF18212F;
+    private static final int CARD_STROKE = 0xFF2A3547;
+    private static final int MUTED = 0xFF93A3BA;
+    private static final int PRIMARY = 0xFF2F6BFF;
+    private static final int DANGER = 0xFFE5484D;
+    private static final int GAME_BG = 0xFF21344F;
+    private static final int GAME_STROKE = 0xFF3A5378;
+    private static final int GAME_FG = 0xFFDCE7FF;
+
     private TextView status;
     private MediaProjectionManager mpm;
-    /** 等待屏幕采集授权期间记住用户选的游戏。 */
     private String pendingGame = null;
 
     @Override
@@ -34,63 +46,137 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         mpm = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
 
+        ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setBackground(new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM, new int[]{BG_TOP, BG_BOTTOM}));
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(48, 48, 48, 48);
-        root.setBackgroundColor(0xFF10141C);
+        root.setPadding(dp(20), dp(28), dp(20), dp(28));
+        scroll.addView(root, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
         title.setText("斗地主记牌器");
         title.setTextColor(0xFFFFFFFF);
-        title.setTextSize(22);
-        title.setPadding(0, 0, 0, 24);
+        title.setTextSize(26);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
         root.addView(title);
+
+        TextView subtitle = new TextView(this);
+        subtitle.setText("选择游戏 · 自动识别 · 悬浮窗记牌");
+        subtitle.setTextColor(MUTED);
+        subtitle.setTextSize(13);
+        subtitle.setPadding(0, dp(4), 0, dp(16));
+        root.addView(subtitle);
 
         status = new TextView(this);
         status.setTextColor(0xFFB8C4D8);
-        status.setTextSize(15);
-        status.setPadding(0, 0, 0, 24);
-        root.addView(status, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        status.setTextSize(13);
+        status.setPadding(dp(12), dp(10), dp(12), dp(10));
+        status.setBackground(rounded(0xFF111A27, dp(12), 0xFF26313F));
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        slp.setMargins(0, 0, 0, dp(8));
+        root.addView(status, slp);
 
         // 第一组：悬浮窗授权 + 停止
-        root.addView(groupLabel("① 悬浮窗 / 停止"));
-        LinearLayout row1 = new LinearLayout(this);
-        row1.setOrientation(LinearLayout.HORIZONTAL);
-        row1.setGravity(Gravity.CENTER_HORIZONTAL);
-        row1.addView(makeButton("授权悬浮窗", v -> requestOverlay(), 240));
-        row1.addView(makeButton("停止", v -> stopCapture(), 240));
-        root.addView(row1);
+        LinearLayout card1 = card();
+        card1.addView(sectionLabel("① 悬浮窗 / 停止"));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_HORIZONTAL);
+        Button perm = textButton("授权悬浮窗", PRIMARY, 0xFFFFFFFF);
+        perm.setOnClickListener(v -> requestOverlay());
+        Button stop = textButton("停止", DANGER, 0xFFFFFFFF);
+        stop.setOnClickListener(v -> stopCapture());
+        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        half.setMargins(dp(4), dp(6), dp(4), dp(6));
+        LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        half2.setMargins(dp(4), dp(6), dp(4), dp(6));
+        row.addView(perm, half);
+        row.addView(stop, half2);
+        card1.addView(row);
+        root.addView(card1);
 
         // 第二组：选择游戏开始截屏
-        root.addView(groupLabel("② 选择游戏开始截屏"));
-        root.addView(makeButton("小程序欢乐斗地主", v -> startCapture("hlddz_mobile"), 520));
-        root.addView(makeButton("王者荣耀斗地主", v -> startCapture("wzryddz"), 520));
+        LinearLayout card2 = card();
+        card2.addView(sectionLabel("② 选择游戏开始截屏"));
+        card2.addView(gameButton("小程序欢乐斗地主", "hlddz_mobile"));
+        card2.addView(gameButton("王者荣耀斗地主", "wzryddz"));
+        TextView hint = new TextView(this);
+        hint.setText("选中游戏后会请求屏幕采集授权");
+        hint.setTextColor(0xFF6F7E93);
+        hint.setTextSize(12);
+        hint.setPadding(dp(4), dp(10), 0, 0);
+        card2.addView(hint);
+        root.addView(card2);
 
-        setContentView(root);
+        setContentView(scroll);
         requestNotifPermission();
         refreshStatus();
     }
 
-    private TextView groupLabel(String text) {
+    private int dp(float v) {
+        return Math.round(v * getResources().getDisplayMetrics().density);
+    }
+
+    private GradientDrawable rounded(int color, int radius, int stroke) {
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadius(radius);
+        if (stroke != 0) {
+            g.setStroke(dp(1), stroke);
+        }
+        return g;
+    }
+
+    private LinearLayout card() {
+        LinearLayout c = new LinearLayout(this);
+        c.setOrientation(LinearLayout.VERTICAL);
+        c.setPadding(dp(16), dp(14), dp(16), dp(14));
+        c.setBackground(rounded(CARD_BG, dp(18), CARD_STROKE));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(8), 0, dp(8));
+        c.setLayoutParams(lp);
+        return c;
+    }
+
+    private TextView sectionLabel(String text) {
         TextView tv = new TextView(this);
         tv.setText(text);
-        tv.setTextColor(0xFF8FA3C0);
-        tv.setTextSize(13);
-        tv.setPadding(0, 24, 0, 8);
+        tv.setTextColor(0xFFAFC0D8);
+        tv.setTextSize(14);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setPadding(dp(2), 0, 0, dp(6));
         return tv;
     }
 
-    private Button makeButton(String text, android.view.View.OnClickListener l, int width) {
+    private Button textButton(String text, int bg, int fg) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(16);
-        b.setOnClickListener(l);
+        b.setTextColor(fg);
+        b.setAllCaps(false);
+        b.setMinHeight(dp(50));
+        b.setPadding(dp(10), dp(10), dp(10), dp(10));
+        b.setBackground(rounded(bg, dp(14), 0));
+        b.setStateListAnimator(null);
+        return b;
+    }
+
+    private Button gameButton(String text, final String gameId) {
+        Button b = textButton(text, GAME_BG, GAME_FG);
+        b.setBackground(rounded(GAME_BG, dp(14), GAME_STROKE));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                width, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(6, 12, 6, 12);
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(6), 0, dp(6));
         b.setLayoutParams(lp);
+        b.setOnClickListener(v -> startCapture(gameId));
         return b;
     }
 

@@ -40,6 +40,12 @@ public class CaptureService extends Service {
     public static final String EXTRA_DATA = "data";
     public static final String EXTRA_GAME = "game";
 
+    /**
+     * 调试用：把采集原始帧落盘到 filesDir/frame.raw（供 adb run-as 取出核对）。
+     * 默认关闭；只在排查采集/识别问题时临时改 true，正式使用不要开。
+     */
+    private static final boolean DEBUG_DUMP_FRAME = false;
+
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
     private ImageReader reader;
@@ -283,8 +289,10 @@ public class CaptureService extends Service {
                 frameCount++;
                 int mean = meanOf(bytes);
                 if (frameCount % 15 == 1) {
-                    dumpFrame(bytes, image.getWidth(), image.getHeight(), rowStride,
-                            plane.getPixelStride(), snapshot);
+                    if (DEBUG_DUMP_FRAME) {
+                        dumpFrame(bytes, image.getWidth(), image.getHeight(), rowStride,
+                                plane.getPixelStride(), snapshot);
+                    }
                     android.util.Log.d("decktrace", "frame " + image.getWidth() + "x"
                             + image.getHeight() + " stride=" + rowStride + " mean=" + mean + " snap="
                             + (snapshot == null ? "null"
@@ -383,7 +391,7 @@ public class CaptureService extends Service {
         return (int) (sum / n);
     }
 
-    /** 定时落盘，方便 adb run-as 取出核对采集内容。 */
+    /** 调试落盘：覆盖写同一个 frame.raw/frame.txt（不会累积增长），仅 DEBUG_DUMP_FRAME 打开时调用。 */
     private void dumpFrame(byte[] bytes, int w, int h, int stride, int pixelStride, String meta) {
         try {
             try (FileOutputStream out = new FileOutputStream(new File(getFilesDir(), "frame.raw"))) {
