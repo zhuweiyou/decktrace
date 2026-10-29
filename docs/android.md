@@ -115,7 +115,7 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
 - JNI：`crates/jni_bridge` 编 `libjni_bridge.so`（crate-type cdylib，
   lib 名 `jni_bridge`），对外 `create(assetsDir, gameId)/pushFrame/reset/destroy`；
   `create` 按 `gameId`（`hlddz_mobile` / `wzryddz`）动态选择 profile 与识别器，未知 id 返回 0。
-- 模板/牌面资源直接复用 `crates/hlddz_mobile/assets` 与 `crates/app/assets`
+- 模板/牌面资源直接复用 `crates/hlddz_mobile/assets` 与 `crates/app/assets/gui`
   （Gradle `sourceSets.assets.srcDirs`）。
 
 构建（推荐用 xtask，一条命令出 .so + APK）：
