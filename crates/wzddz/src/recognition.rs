@@ -69,6 +69,10 @@ impl WzddzRecognizer {
 
         let ranks = load_templates(&rank_dir)?;
         let suits = load_templates(&suit_dir)?;
+        if std::env::var("DECKTRACE_RANK").is_ok() {
+            eprintln!("[tpl] rank_dir={} ranks={:?}", rank_dir.display(),
+                ranks.iter().map(|(k,v)| (k.clone(), v.dimensions())).collect::<Vec<_>>());
+        }
         if ranks.is_empty() || suits.len() != 4 {
             return Err(RecognitionError::IncompleteTemplates);
         }
@@ -112,7 +116,7 @@ impl WzddzRecognizer {
         let (red, dark, combined) = masks(image, &mut red_buf, &mut dark_buf, &mut combined_buf);
         let t_masks = started.elapsed();
         let (mut kept, jokers) = rayon::join(
-            || self.detect_cards(image, &red, &dark),
+            || self.detect_cards(image, &red, &dark, &combined),
             || {
                 if !detect_jokers {
                     return Vec::new();
@@ -158,11 +162,11 @@ impl WzddzRecognizer {
         }
     }
 
-    fn detect_cards(&self, image: &RgbImage, red: &GrayImage, dark: &GrayImage) -> Vec<Detection> {
+    fn detect_cards(&self, image: &RgbImage, red: &GrayImage, dark: &GrayImage, combined: &GrayImage) -> Vec<Detection> {
         // 红/黑两套掩码互不依赖，并行处理。
         let (mut red_raw, mut black_raw) = rayon::join(
-            || self.detect_color(image, red, "red"),
-            || self.detect_color(image, dark, "black"),
+            || self.detect_color(image, red, combined, "red"),
+            || self.detect_color(image, dark, combined, "black"),
         );
         red_raw.append(&mut black_raw);
         let mut raw = red_raw;
@@ -186,7 +190,7 @@ impl WzddzRecognizer {
         kept
     }
 
-    fn detect_color(&self, image: &RgbImage, mask: &GrayImage, color: &str) -> Vec<Detection> {
+    fn detect_color(&self, image: &RgbImage, mask: &GrayImage, combined: &GrayImage, color: &str) -> Vec<Detection> {
         let mut raw = Vec::new();
         let dbg = std::env::var("DECKTRACE_COMPS").is_ok();
         for comp in components(mask) {
@@ -204,10 +208,13 @@ impl WzddzRecognizer {
             if fill < 0.15 || comp.area < 60 {
                 continue;
             }
-            let Some((rx, ry, rw, rh)) = rank_above(mask, comp.x, comp.y, comp.w, comp.h) else {
+            let Some((rx, ry, rw, rh)) = rank_above(combined, comp.x, comp.y, comp.w, comp.h) else {
                 continue;
             };
             let rank_crop = crop(mask, rx, ry, rw, rh);
+            if dbg && (comp.x == 649 || comp.x == 748 || comp.x == 553) {
+                let _ = rank_crop.save(format!("/tmp/adbprobe/rc_{}.png", comp.x));
+            }
             let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
             let suit_crop = crop(mask, comp.x, comp.y, comp.w, comp.h);
             let (suit, suit_score) = self.classify_suit(&suit_crop, color);
@@ -623,6 +630,10 @@ impl WzddzRecognizer {
                 (name.clone(), iou(&a, template))
             })
             .collect();
+        if std::env::var("DECKTRACE_RANK").is_ok() {
+            eprintln!("[rank] crop {}x{} scores {:?}", crop.width(), crop.height(),
+                scores.iter().map(|(n, v)| (n.clone(), (v * 100.0).round() / 100.0)).collect::<Vec<_>>());
+        }
         scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         let best = scores.first().cloned().unwrap_or_default();
         let second = scores.get(1).map(|s| s.1).unwrap_or(0.0);
@@ -1005,18 +1016,11 @@ fn crop(image: &GrayImage, x: u32, y: u32, w: u32, h: u32) -> GrayImage {
     image::imageops::crop_imm(image, x, y, w, h).to_image()
 }
 
-fn normalize_rank(crop: &GrayImage, target_h: u32) -> GrayImage {
-    let (w, h) = crop.dimensions();
-    if h == 0 {
-        return GrayImage::new(1, target_h);
-    }
-    let nw = ((w as f32 * target_h as f32 / h as f32).round() as u32).max(1);
-    let filter = if target_h >= h {
-        FilterType::Nearest
-    } else {
-        FilterType::Triangle
-    };
-    let resized = image::imageops::resize(crop, nw, target_h, filter);
+fn normalize_rank(crop: &GrayImage, _target_h: u32) -> GrayImage {
+    // 固定画布，消除不同牌宽高比带来的形变（点数模板也按 32x40 存放）。
+    const RW: u32 = 32;
+    const RH: u32 = 40;
+    let resized = image::imageops::resize(crop, RW, RH, FilterType::Triangle);
     binarize_owned(resized)
 }
 
