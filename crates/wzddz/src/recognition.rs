@@ -233,7 +233,7 @@ impl WzddzRecognizer {
                 continue;
             };
             let rank_crop = crop(mask, rx, ry, rw, rh);
-            if dbg && (comp.x == 649 || comp.x == 748 || comp.x == 553) {
+            if dbg && (comp.x == 649 || comp.x == 748 || comp.x == 553 || comp.x == 1939) {
                 let _ = rank_crop.save(format!("/tmp/adbprobe/rc_{}.png", comp.x));
             }
             let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
@@ -980,10 +980,9 @@ fn components(mask: &GrayImage) -> Vec<Comp> {
 fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, ch: u32, scale: f32) -> Option<(u32, u32, u32, u32)> {
     let (mw, mh) = mask.dimensions();
     let pad = ((4.0 * scale) as u32).max(3);
-    let gap = ((5.0 * scale) as u32).max(2);
-    let x0 = cx.saturating_sub(cw / 6 + pad);
-    let x1 = (cx + cw + cw / 6 + pad).min(mw);
-    let _ = gap;
+    let _gap = ((5.0 * scale) as u32).max(2);
+    let x0 = cx.saturating_sub(pad);
+    let x1 = (cx + cw + pad).min(mw);
     let y0 = cy.saturating_sub(ch * 2 + (8.0 * scale) as u32);
     let y1 = cy.saturating_sub(2);
     if y1 <= y0 || x1 <= x0 || y1 > mh {
@@ -1008,7 +1007,73 @@ fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, ch: u32, scale: f32) 
     if cnt < 40 || minx == u32::MAX {
         return None;
     }
-    Some((minx, miny, maxx - minx + 1, maxy - miny + 1))
+    // 按行投影取最长连续字形带，自动丢弃上方孤立杂点（身份飘带/水印尖角）。
+    let mut row_has: Vec<bool> = vec![false; (maxy - miny + 1) as usize];
+    for yy in miny..=maxy {
+        let mut any = false;
+        for xx in minx..=maxx {
+            if mask.get_pixel(xx, yy).0[0] > 0 {
+                any = true;
+                break;
+            }
+        }
+        row_has[(yy - miny) as usize] = any;
+    }
+    // 找最长连续（允许 gap<=2）的 true 段
+    let mut best = (0usize, 0usize, 0usize); // start,end,len
+    let mut i = 0;
+    while i < row_has.len() {
+        if row_has[i] {
+            let s0 = i;
+            let mut last = i;
+            let mut j = i + 1;
+            while j < row_has.len() {
+                if row_has[j] {
+                    last = j;
+                    j += 1;
+                } else {
+                    // 允许最多 2 行空
+                    let mut k = j;
+                    while k < row_has.len() && !row_has[k] && k - last <= 2 {
+                        k += 1;
+                    }
+                    if k < row_has.len() && row_has[k] {
+                        j = k + 1;
+                        last = k;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            let len = last - s0 + 1;
+            if len > best.2 {
+                best = (s0, last, len);
+            }
+            i = last + 1;
+        } else {
+            i += 1;
+        }
+    }
+    if best.2 == 0 {
+        return None;
+    }
+    let by0 = miny + best.0 as u32;
+    let by1 = miny + best.1 as u32;
+    // 在该行带内重新求横向范围
+    let mut bx0 = u32::MAX;
+    let mut bx1 = 0u32;
+    for yy in by0..=by1 {
+        for xx in minx..=maxx {
+            if mask.get_pixel(xx, yy).0[0] > 0 {
+                bx0 = bx0.min(xx);
+                bx1 = bx1.max(xx);
+            }
+        }
+    }
+    if bx0 == u32::MAX {
+        return None;
+    }
+    Some((bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1))
 }
 
 fn rank_bbox(mask: &GrayImage, sx: u32, sy: u32, sw: u32, sh: u32) -> Option<(u32, u32, u32, u32)> {
