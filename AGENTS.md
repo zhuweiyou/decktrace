@@ -79,7 +79,7 @@ cargo run --release -p app -- --game hlddz           # 强制指定 PC 游戏
 cargo run --release -p app -- --capture adb --game hlddz_mobile --adb-serial <serial>  # 手机 adb 调试
 cargo run --release -p app --example tracker_probe -- --adb --serial <serial>          # 无头调牌
 cargo build --release -p app                         # 只编译
-cargo xtask package-macos                            # 生成 dist/斗地主记牌器.app
+cargo xtask package-macos                            # 生成 dist/decktrace.app
 cargo xtask install-macos                            # 打包 + 签名 + 装到 /Applications
 cargo xtask icon                                     # 由 AppIcon.png 重新生成 icns
 cargo xtask package-android                          # 编 JNI .so(arm64-v8a) + gradlew assembleDebug 出 APK
@@ -128,7 +128,7 @@ cargo run --release -p app
 
 ```bash
 cargo xtask package-android
-adb install -r android/app/build/outputs/apk/debug/王者斗地主辅助.apk
+adb install -r android/app/build/outputs/apk/debug/decktrace.apk
 ```
 
 检查：①「授权悬浮窗」/「停止」可用；② 点游戏开始采集；横屏显示悬浮窗牌条；点停止结束。
@@ -137,12 +137,12 @@ adb install -r android/app/build/outputs/apk/debug/王者斗地主辅助.apk
 
 ```bash
 cargo xtask install-macos   # 日常：打包 + 签名 + 装到 /Applications
-cargo xtask package-macos   # 只出 dist/斗地主记牌器.app
+cargo xtask package-macos   # 只出 dist/decktrace.app
 cargo xtask package-android # .so + APK（见 docs/android.md）
 ```
 
 - 打包逻辑在 `xtask/`，不要恢复 shell 脚本。
-- macOS：产物名 `斗地主记牌器.app`；bundle id `com.zhuweiyou.decktrace`；可执行名 `decktrace`。
+- macOS：产物名 `decktrace.app`；bundle id `com.zhuweiyou.decktrace`；可执行名 `decktrace`。
   签名默认找本机 `decktrace-dev` 证书（`--sign` 可覆盖）；ad-hoc 会导致 TCC 重复授权。
   只处理 `crates/<game>/src/profile.rs` 存在的游戏 crate；资源复制到 `Contents/Resources/assets/<game>`（目录名 == id）；
   `Info.plist` 必须写 `Contents/Info.plist`。详见 [docs/packaging.md](docs/packaging.md)。
@@ -160,7 +160,7 @@ cargo xtask package-android # .so + APK（见 docs/android.md）
 - [ ] 真实截图 / 真实窗口（或真机）验证，保留失败样本
 - [ ] 全部 Rust 测试通过（`cargo test --release --workspace`）
 - [ ] 识别性能无明显退化
-- [ ] macOS：`/Applications/斗地主记牌器.app` 能启动、显示正确、图标正确
+- [ ] macOS：`/Applications/decktrace.app` 能启动、显示正确、图标正确
 - [ ] Android：APK 能安装，悬浮窗/停止/游戏选择正常，采集链路跑通
 - [ ] README 只含用户内容；开发内容在 AGENTS/docs
 - [ ] 架构 / 识别 / 打包变化已同步 `docs/`

@@ -131,8 +131,8 @@ cargo xtask package-android --skip-gradle   # 只编 .so，APK 自己打
 产物：
 
 - `.so`：`android/app/src/main/jniLibs/arm64-v8a/libjni_bridge.so`（始终 release 编译）
-- debug APK：`android/app/build/outputs/apk/debug/王者斗地主辅助.apk`
-- release APK：`android/app/build/outputs/apk/release/王者斗地主辅助.apk`（release 已用 debug 签名，可直接安装）
+- debug APK：`android/app/build/outputs/apk/debug/decktrace.apk`
+- release APK：`android/app/build/outputs/apk/release/decktrace.apk`（release 已用 debug 签名，可直接安装）
 
 安装：`adb install -r <上面的 apk 路径>`
 

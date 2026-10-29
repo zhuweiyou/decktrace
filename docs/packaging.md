@@ -4,14 +4,14 @@
 
 ```bash
 cargo xtask install-macos   # 日常用：打包 + 签名 + 安装到 /Applications
-cargo xtask package-macos   # 只生成 dist/斗地主记牌器.app
+cargo xtask package-macos   # 只生成 dist/decktrace.app
 cargo xtask icon            # 由 AppIcon.png 重新生成 icns 和 128px 图标
 ```
 
 `cargo xtask` 通过 `.cargo/config.toml` 的 alias 调用 `xtask` crate，
 打包逻辑全是 Rust，不要恢复 shell 脚本。
 
-产物：`dist/斗地主记牌器.app`，安装后是 `/Applications/斗地主记牌器.app`，
+产物：`dist/decktrace.app`，安装后是 `/Applications/decktrace.app`，
 bundle id `com.zhuweiyou.decktrace`，可执行文件名 `decktrace`。
 
 ## install-macos 做什么
@@ -19,7 +19,7 @@ bundle id `com.zhuweiyou.decktrace`，可执行文件名 `decktrace`。
 1. 调用 `package-macos`
 2. 退出正在运行的实例
 3. 删除旧安装（包括历史英文名 `decktrace.app`）
-4. `ditto` 拷贝到 `/Applications/斗地主记牌器.app`
+4. `ditto` 拷贝到 `/Applications/decktrace.app`
 5. `codesign --verify` 校验签名
 6. `open` 启动
 
@@ -28,7 +28,7 @@ bundle id `com.zhuweiyou.decktrace`，可执行文件名 `decktrace`。
 ## package-macos 做什么
 
 1. `cargo build --release -p app`
-2. 重建 `dist/斗地主记牌器.app`
+2. 重建 `dist/decktrace.app`
 3. 拷贝二进制到 `Contents/MacOS/decktrace`
 4. 拷贝 `crates/app/assets/AppIcon.icns` 到 `Contents/Resources/`
 5. 扫描 `crates/*/src/profile.rs`，识别游戏 crate

@@ -96,7 +96,7 @@ fn install_macos(should_open: bool) -> Result<()> {
 
     // 先退出运行中的实例，否则替换会失败；顺手清掉旧的英文名安装。
     let _ = Command::new("pkill")
-        .args(["-f", "decktrace.app|斗地主记牌器.app"])
+        .args(["-f", "decktrace.app"])
         .status();
     std::thread::sleep(Duration::from_millis(600));
     for stale in [dest.as_path(), Path::new("/Applications/decktrace.app")] {
@@ -170,7 +170,7 @@ fn regenerate_icon() -> Result<()> {
 }
 
 /// 打包产物与安装后的应用名。Finder 里显示的就是这个文件名。
-const APP_BUNDLE: &str = "斗地主记牌器.app";
+const APP_BUNDLE: &str = "decktrace.app";
 
 /// 安卓只保留一个 ABI（当前 APK 的 abiFilters 也是 arm64-v8a）。
 const ANDROID_ABI: &str = "arm64-v8a";
@@ -418,7 +418,7 @@ fn package_windows() -> Result<()> {
         .args(["build", "--release", "-p", "app"])
         .current_dir(&root))?;
 
-    let out = root.join("dist").join("斗地主记牌器");
+    let out = root.join("dist").join("decktrace");
     if out.exists() {
         fs::remove_dir_all(&out)
             .with_context(|| format!("删除旧产物失败：{}", out.display()))?;
@@ -511,11 +511,11 @@ fn info_plist(version: &str) -> String {
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>斗地主记牌器</string>
+    <string>decktrace</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleDisplayName</key>
-    <string>斗地主记牌器</string>
+    <string>decktrace</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

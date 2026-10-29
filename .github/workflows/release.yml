@@ -54,11 +54,11 @@ jobs:
       - name: Zip app
         run: |
           cd dist
-          ditto -c -k --keepParent "斗地主记牌器.app" "斗地主记牌器-macos.zip"
+          ditto -c -k --keepParent "decktrace.app" "decktrace-macos.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: macos
-          path: dist/斗地主记牌器-macos.zip
+          path: dist/decktrace-macos.zip
           if-no-files-found: error
 
   build-windows:
@@ -71,11 +71,11 @@ jobs:
         run: cargo xtask package-windows
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path "dist/斗地主记牌器/*" -DestinationPath "dist/斗地主记牌器-windows.zip"
+        run: Compress-Archive -Path "dist/decktrace/*" -DestinationPath "dist/decktrace-windows.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/斗地主记牌器-windows.zip
+          path: dist/decktrace-windows.zip
           if-no-files-found: error
 
   build-android:
@@ -105,10 +105,15 @@ jobs:
           cargo install cargo-ndk --locked
       - name: Package Android
         run: cargo xtask package-android --release
+      - name: Zip APK
+        run: |
+          mkdir -p dist
+          cp "android/app/build/outputs/apk/release/decktrace.apk" "dist/decktrace.apk"
+          cd dist && zip -j "decktrace-android.zip" "decktrace.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android
-          path: android/app/build/outputs/apk/release/王者斗地主辅助.apk
+          path: dist/decktrace-android.zip
           if-no-files-found: error
 
   release:
@@ -135,6 +140,6 @@ jobs:
           git push origin "$TAG"
           echo "== 产物 =="; find dist -type f
           gh release create "$TAG" --title "$TAG" --notes "$NOTES" \
-            "dist/macos/斗地主记牌器-macos.zip" \
-            "dist/windows/斗地主记牌器-windows.zip" \
-            "dist/android/王者斗地主辅助.apk"
+            "dist/macos/decktrace-macos.zip" \
+            "dist/windows/decktrace-windows.zip" \
+            "dist/android/decktrace-android.zip"
