@@ -38,6 +38,7 @@ public class CaptureService extends Service {
     public static final String ACTION_RESET = "com.zhuweiyou.decktrace.RESET";
     public static final String EXTRA_CODE = "code";
     public static final String EXTRA_DATA = "data";
+    public static final String EXTRA_GAME = "game";
 
     private MediaProjection projection;
     private VirtualDisplay virtualDisplay;
@@ -107,9 +108,19 @@ public class CaptureService extends Service {
             return;
         }
 
-        String assetsRoot = new File(getFilesDir(), "hlddz_mobile").getAbsolutePath();
-        copyAssetDir("templates", new File(assetsRoot, "templates"));
-        handle = NativeBridge.create(assetsRoot);
+        String gameId = intent.getStringExtra(EXTRA_GAME);
+        if (gameId == null || gameId.trim().isEmpty()) {
+            gameId = "hlddz_mobile";
+        }
+        String assetsRoot = new File(getFilesDir(), gameId).getAbsolutePath();
+        File templatesDir = new File(assetsRoot, "templates");
+        // 目前只有欢乐斗地主有模板；王者荣耀斗地主为占位架子，先建空目录让 profile 校验通过。
+        if ("hlddz_mobile".equals(gameId)) {
+            copyAssetDir("templates", templatesDir);
+        }
+        templatesDir.mkdirs();
+        handle = NativeBridge.create(assetsRoot, gameId);
+        android.util.Log.d("decktrace", "create game=" + gameId + " assets=" + assetsRoot);
         if (handle == 0) {
             stopEverything();
             return;

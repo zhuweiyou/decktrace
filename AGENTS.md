@@ -45,6 +45,7 @@ crates/
   jjddz/       # JJ斗地主适配：profile、templates、recognition
   hlddz/       # 欢乐斗地主适配：profile、templates、recognition
   hlddz_mobile/ # 欢乐斗地主手机横屏小程序适配（独立于 hlddz，模板/区域单独标定）
+  wzryddz/     # 王者荣耀斗地主（基础架子：GameProfile + 占位识别器，识别/素材待补）
   capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
   app/   # GUI + Session + registry（唯一发布产物）
   jni_bridge/ # Android JNI 桥（cdylib -> libjni_bridge.so）

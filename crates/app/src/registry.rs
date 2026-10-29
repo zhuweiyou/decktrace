@@ -20,6 +20,11 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
             game.validate()?;
             Ok(game)
         }
+        "wzryddz" => {
+            let game = wzryddz::profile();
+            game.validate()?;
+            Ok(game)
+        }
         other => Err(format!(
             "未知游戏：{other}，可用：{}",
             list_games()
@@ -32,7 +37,12 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
 }
 
 pub fn list_games() -> Vec<GameProfile> {
-    vec![jjddz::profile(), hlddz::profile(), hlddz_mobile::profile()]
+    vec![
+        jjddz::profile(),
+        hlddz::profile(),
+        hlddz_mobile::profile(),
+        wzryddz::profile(),
+    ]
 }
 
 /// 为游戏创建识别器。新增游戏时在这里加一个分支。
@@ -49,6 +59,11 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
         "hlddz_mobile" => {
             let recognizer =
                 hlddz_mobile::HlddzRecognizer::new(game).map_err(|err| err.to_string())?;
+            Ok(Arc::new(recognizer))
+        }
+        "wzryddz" => {
+            let recognizer =
+                wzryddz::WzryddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))
         }
         other => Err(format!("没有为游戏 {other} 注册识别器")),

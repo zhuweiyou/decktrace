@@ -13,5 +13,6 @@ crate-type = ["cdylib"]
 [dependencies]
 tracking = { path = "../tracking" }
 hlddz_mobile = { path = "../hlddz_mobile" }
+wzryddz = { path = "../wzryddz" }
 image.workspace = true
 jni = "0.21"

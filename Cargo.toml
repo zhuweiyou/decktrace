@@ -5,6 +5,7 @@ members = [
     "crates/jjddz",
     "crates/hlddz",
     "crates/hlddz_mobile",
+    "crates/wzryddz",
     "crates/jni_bridge",
     "crates/capture",
     "crates/app",

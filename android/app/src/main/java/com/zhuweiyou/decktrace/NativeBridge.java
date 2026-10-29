@@ -8,8 +8,8 @@ public final class NativeBridge {
 
     private NativeBridge() {}
 
-    /** 初始化识别器与记牌状态机，返回句柄（0 表示失败）。 */
-    public static native long create(String assetsDir);
+    /** 初始化指定游戏的识别器与记牌状态机，返回句柄（0 表示失败）。 */
+    public static native long create(String assetsDir, String gameId);
 
     /** 送入一帧 RGBA_8888，返回快照字符串（null 表示失败）。 */
     public static native String pushFrame(long handle, byte[] frame, int width, int height, int rowStride);

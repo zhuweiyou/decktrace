@@ -27,6 +27,7 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
     mut env: JNIEnv,
     _class: JClass,
     assets_dir: JString,
+    game_id: JString,
 ) -> jlong {
     let assets: String = match env.get_string(&assets_dir) {
         Ok(s) => s.into(),
@@ -35,18 +36,52 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
             return 0;
         }
     };
-    let game = hlddz_mobile::profile_with_assets(PathBuf::from(assets));
+    let game_id: String = match env.get_string(&game_id) {
+        Ok(s) => s.into(),
+        Err(err) => {
+            eprintln!("[jni] get game id failed: {err}");
+            return 0;
+        }
+    };
+    let game_id = if game_id.trim().is_empty() {
+        "hlddz_mobile".to_string()
+    } else {
+        game_id
+    };
+
+    let assets_path = PathBuf::from(&assets);
+    let (game, recognizer): (GameProfile, SharedRecognizer) = match game_id.as_str() {
+        "hlddz_mobile" => {
+            let game = hlddz_mobile::profile_with_assets(assets_path);
+            match hlddz_mobile::HlddzRecognizer::new(&game) {
+                Ok(rec) => (game, Arc::new(rec) as SharedRecognizer),
+                Err(err) => {
+                    eprintln!("[jni] hlddz_mobile 识别器初始化失败：{err}");
+                    return 0;
+                }
+            }
+        }
+        "wzryddz" => {
+            let game = wzryddz::profile_with_assets(assets_path);
+            match wzryddz::WzryddzRecognizer::new(&game) {
+                Ok(rec) => (game, Arc::new(rec) as SharedRecognizer),
+                Err(err) => {
+                    eprintln!("[jni] wzryddz 识别器初始化失败：{err}");
+                    return 0;
+                }
+            }
+        }
+        other => {
+            eprintln!("[jni] 未知游戏 id：{other}");
+            return 0;
+        }
+    };
     if let Err(err) = game.validate() {
         eprintln!("[jni] game validate failed: {err}");
         return 0;
     }
-    let recognizer = match hlddz_mobile::HlddzRecognizer::new(&game) {
-        Ok(rec) => Arc::new(rec) as SharedRecognizer,
-        Err(err) => {
-            eprintln!("[jni] recognizer init failed: {err}");
-            return 0;
-        }
-    };
+    eprintln!("[jni] create game={} assets={}", game.id, assets);
+
     let game = Arc::new(game);
     let tracker = CardTracker::new(game.clone(), 2, 0.92, 1.6);
     let engine = Engine {

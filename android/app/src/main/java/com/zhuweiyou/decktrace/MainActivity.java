@@ -15,13 +15,19 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** 入口：授权悬浮窗 + 请求屏幕采集 + 启动/停止采集服务。 */
+/**
+ * 入口页：
+ * 第一组：悬浮窗授权 + 停止；
+ * 第二组：选择游戏（小程序欢乐斗地主 / 王者荣耀斗地主）并开始截屏。
+ */
 public class MainActivity extends Activity {
     private static final int REQ_CAPTURE = 1001;
     private static final int REQ_NOTIF = 1002;
 
     private TextView status;
     private MediaProjectionManager mpm;
+    /** 等待屏幕采集授权期间记住用户选的游戏。 */
+    private String pendingGame = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -48,22 +54,42 @@ public class MainActivity extends Activity {
         root.addView(status, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        root.addView(makeButton("1. 授权悬浮窗", v -> requestOverlay()));
-        root.addView(makeButton("2. 开始采集", v -> startCapture()));
+        // 第一组：悬浮窗授权 + 停止
+        root.addView(groupLabel("① 悬浮窗 / 停止"));
+        LinearLayout row1 = new LinearLayout(this);
+        row1.setOrientation(LinearLayout.HORIZONTAL);
+        row1.setGravity(Gravity.CENTER_HORIZONTAL);
+        row1.addView(makeButton("授权悬浮窗", v -> requestOverlay(), 240));
+        row1.addView(makeButton("停止", v -> stopCapture(), 240));
+        root.addView(row1);
+
+        // 第二组：选择游戏开始截屏
+        root.addView(groupLabel("② 选择游戏开始截屏"));
+        root.addView(makeButton("小程序欢乐斗地主", v -> startCapture("hlddz_mobile"), 520));
+        root.addView(makeButton("王者荣耀斗地主", v -> startCapture("wzryddz"), 520));
 
         setContentView(root);
         requestNotifPermission();
         refreshStatus();
     }
 
-    private Button makeButton(String text, android.view.View.OnClickListener l) {
+    private TextView groupLabel(String text) {
+        TextView tv = new TextView(this);
+        tv.setText(text);
+        tv.setTextColor(0xFF8FA3C0);
+        tv.setTextSize(13);
+        tv.setPadding(0, 24, 0, 8);
+        return tv;
+    }
+
+    private Button makeButton(String text, android.view.View.OnClickListener l, int width) {
         Button b = new Button(this);
         b.setText(text);
         b.setTextSize(16);
         b.setOnClickListener(l);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                520, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 12, 0, 12);
+                width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(6, 12, 6, 12);
         b.setLayoutParams(lp);
         return b;
     }
@@ -87,13 +113,23 @@ public class MainActivity extends Activity {
         startActivity(intent);
     }
 
-    private void startCapture() {
+    /** 选择某个游戏后请求屏幕采集授权，授权成功即启动对应游戏的采集。 */
+    private void startCapture(String gameId) {
         if (!Settings.canDrawOverlays(this)) {
             status.setText("请先授予悬浮窗权限");
             return;
         }
+        pendingGame = gameId;
+        status.setText("请求屏幕采集授权（" + gameName(gameId) + "）…");
         Intent intent = mpm.createScreenCaptureIntent();
         startActivityForResult(intent, REQ_CAPTURE);
+    }
+
+    private void stopCapture() {
+        Intent svc = new Intent(this, CaptureService.class);
+        svc.setAction(CaptureService.ACTION_STOP);
+        startService(svc);
+        status.setText("已请求停止采集");
     }
 
     @Override
@@ -101,20 +137,32 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_CAPTURE) {
             if (resultCode == RESULT_OK && data != null) {
+                String gameId = pendingGame == null ? "hlddz_mobile" : pendingGame;
                 Intent svc = new Intent(this, CaptureService.class);
                 svc.setAction(CaptureService.ACTION_START);
                 svc.putExtra(CaptureService.EXTRA_CODE, resultCode);
                 svc.putExtra(CaptureService.EXTRA_DATA, data);
+                svc.putExtra(CaptureService.EXTRA_GAME, gameId);
                 startForegroundService(svc);
-                status.setText("采集中，悬浮窗应已出现在屏幕顶部");
+                status.setText("采集中（" + gameName(gameId) + "），悬浮窗应已出现在屏幕顶部");
             } else {
                 status.setText("用户取消了屏幕采集授权");
             }
         }
     }
 
+    private static String gameName(String id) {
+        if ("wzryddz".equals(id)) {
+            return "王者荣耀斗地主";
+        }
+        if ("hlddz_mobile".equals(id)) {
+            return "小程序欢乐斗地主";
+        }
+        return id;
+    }
+
     private void refreshStatus() {
         boolean overlay = Settings.canDrawOverlays(this);
-        status.setText(overlay ? "悬浮窗权限已授予，点“开始采集”" : "请先点“授权悬浮窗”");
+        status.setText(overlay ? "悬浮窗权限已授予，点下面游戏按钮开始" : "请先点“授权悬浮窗”");
     }
 }
