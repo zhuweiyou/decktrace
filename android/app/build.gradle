@@ -27,7 +27,11 @@ android {
 
     buildTypes {
         debug { }
-        release { minifyEnabled false }
+        release {
+            minifyEnabled false
+            // 便于真机直接安装的性能测试包（与 debug 同签名，可覆盖安装）
+            signingConfig signingConfigs.debug
+        }
     }
 
     compileOptions {

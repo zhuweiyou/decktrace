@@ -189,15 +189,15 @@ impl WzddzRecognizer {
     fn detect_color(&self, image: &RgbImage, mask: &GrayImage, color: &str) -> Vec<Detection> {
         let mut raw = Vec::new();
         for comp in components(mask) {
-            if !(12..=80).contains(&comp.w) || !(12..=85).contains(&comp.h) {
+            if !(10..=95).contains(&comp.w) || !(10..=95).contains(&comp.h) {
                 continue;
             }
             let aspect = comp.w as f32 / comp.h as f32;
-            if !(0.65..=1.45).contains(&aspect) {
+            if !(0.50..=1.60).contains(&aspect) {
                 continue;
             }
             let fill = comp.area as f32 / (comp.w * comp.h) as f32;
-            if fill < 0.28 || comp.area < 120 {
+            if fill < 0.15 || comp.area < 60 {
                 continue;
             }
             let Some((rx, ry, rw, rh)) = rank_bbox(mask, comp.x, comp.y, comp.w, comp.h) else {
