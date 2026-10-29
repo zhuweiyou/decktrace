@@ -49,6 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Package macOS
         run: cargo xtask package-macos
       - name: Zip app
@@ -67,6 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Package Windows
         run: cargo xtask package-windows
       - name: Zip
@@ -84,6 +86,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -102,7 +111,6 @@ jobs:
           "$SM" --install "ndk;27.2.12479018" "platforms;android-34" "build-tools;34.0.0"
           echo "ANDROID_NDK_HOME=$SDK/ndk/27.2.12479018" >> "$GITHUB_ENV"
           rustup target add aarch64-linux-android
-          cargo install cargo-ndk --locked
       - name: Package Android
         run: cargo xtask package-android --release
       - name: Zip APK
