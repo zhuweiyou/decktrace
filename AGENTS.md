@@ -88,6 +88,7 @@ cargo build --release -p decktrace                # 只编译
 cargo xtask package-macos                         # 生成 dist/斗地主记牌器.app
 cargo xtask install-macos                         # 打包 + 签名 + 安装到 /Applications
 cargo xtask icon                                  # 由 AppIcon.png 重新生成 icns
+cargo xtask package-android                       # 编 JNI .so(arm64-v8a) + gradlew assembleDebug 出 APK
 open dist/斗地主记牌器.app                         # 运行打包产物
 ```
 

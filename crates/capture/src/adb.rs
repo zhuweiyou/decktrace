@@ -186,7 +186,8 @@ impl CaptureStream for AdbCaptureStream {
         if out.stdout.is_empty() {
             return Err(CaptureError::Capture("screencap 返回空数据".to_string()));
         }
-        let image = image::load_from_memory(&out.stdout)
+        let png = png_bytes(&out.stdout);
+        let image = image::load_from_memory(png)
             .map_err(|err| CaptureError::Capture(format!("解码截图 PNG 失败：{err}")))?;
         let rgb = image.to_rgb8();
         let image = match self.crop {
@@ -237,7 +238,39 @@ fn crop_image(image: RgbImage, crop: Crop) -> Result<RgbImage> {
 }
 
 fn adb_bin() -> String {
-    std::env::var("DECKTRACE_ADB_BIN").unwrap_or_else(|_| "adb".to_string())
+    let raw = std::env::var("DECKTRACE_ADB_BIN").unwrap_or_else(|_| "adb".to_string());
+    normalize_adb_bin(raw)
+}
+
+/// 规整 adb 可执行文件名。
+///
+/// Windows 上可执行文件是 `adb.exe`：虽然 `CreateProcess` 多数情况会自动补 `.exe`，
+/// 但显式补齐更稳妥（尤其是 `DECKTRACE_ADB_BIN` 指向无扩展名的自定义路径时）。
+fn normalize_adb_bin(raw: String) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return "adb".to_string();
+    }
+    #[cfg(windows)]
+    {
+        if std::path::Path::new(trimmed).extension().is_none() {
+            return format!("{trimmed}.exe");
+        }
+    }
+    trimmed.to_string()
+}
+
+/// 从 adb 输出里切出 PNG。首次运行 adb 可能在 stdout 前面混入 “daemon started” 之类文本，
+/// 按 PNG 魔数定位可避免解码失败（Windows 上尤其常见）。
+fn png_bytes(data: &[u8]) -> &[u8] {
+    const SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
+    if data.starts_with(SIG) {
+        return data;
+    }
+    if let Some(pos) = data.windows(SIG.len()).position(|window| window == SIG) {
+        return &data[pos..];
+    }
+    data
 }
 
 fn adb_command(serial: &Option<String>) -> Command {
@@ -365,5 +398,33 @@ mod tests {
         let cropped = crop_image(image.clone(), Crop { x: 10, y: 10, w: 200, h: 100 }).expect("clamped");
         assert_eq!(cropped.dimensions(), (90, 40));
         assert!(crop_image(image, Crop { x: 200, y: 0, w: 10, h: 10 }).is_err());
+    }
+
+    #[test]
+    fn normalizes_adb_bin() {
+        assert_eq!(normalize_adb_bin("   ".to_string()), "adb");
+        #[cfg(windows)]
+        {
+            assert_eq!(normalize_adb_bin("adb".to_string()), "adb.exe");
+            assert_eq!(
+                normalize_adb_bin(r"C:\tools\platform-tools\adb".to_string()),
+                r"C:\tools\platform-tools\adb.exe"
+            );
+            assert_eq!(normalize_adb_bin("adb.bat".to_string()), "adb.bat");
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(normalize_adb_bin("adb".to_string()), "adb");
+        }
+    }
+
+    #[test]
+    fn extracts_png_from_prefixed_output() {
+        let png = b"\x89PNG\r\n\x1a\nABCDEF";
+        let prefixed = b"* daemon started successfully *\n\x89PNG\r\n\x1a\nABCDEF";
+        assert_eq!(png_bytes(prefixed), png);
+        assert_eq!(png_bytes(png), png);
+        // 没有魔数时原样返回，交给解码器报错。
+        assert_eq!(png_bytes(b"garbage"), b"garbage");
     }
 }

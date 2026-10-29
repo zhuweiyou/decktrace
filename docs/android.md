@@ -57,6 +57,10 @@ cargo run --release -p hlddz-mobile --example check -- frame.png
 - `--adb-crop x,y,w,h`：截图裁剪区域（截图像素）；也可用 `DECKTRACE_ADB_CROP`。
 - `DECKTRACE_ADB_BIN`：adb 可执行路径。
 
+Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）；`DECKTRACE_ADB_BIN`
+指向无扩展名路径时也会自动补 `.exe`。首次运行 `adb` 时 daemon 启动提示若混进 stdout，
+会按 PNG 魔数自动剥离，不会导致解码失败。
+
 ## 已知限制（阶段一）
 
 - adb 帧率低（~0.5fps），`tracker_probe`/GUI 在 adb 模式下强制 `min_hits=1`；
@@ -101,20 +105,33 @@ cargo run --release -p hlddz-mobile --example check -- frame.png
 - 模板/牌面资源直接复用 `crates/hlddz-mobile/assets` 与 `crates/decktrace/assets`
   （Gradle `sourceSets.assets.srcDirs`）。
 
-构建：
+构建（推荐用 xtask，一条命令出 .so + APK）：
 
 ```bash
-# 1) Rust .so（arm64）
-export PATH="$HOME/.rustup/toolchains/stable-aarch64-apple-darwin/bin:$HOME/.cargo/bin:$PATH"
-export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
-export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018
-cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p decktrace-jni
-
-# 2) APK
-cd android
-JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradlew assembleDebug
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+# 前置：cargo install cargo-ndk && rustup target add aarch64-linux-android
+# 并设置 ANDROID_NDK_HOME / ANDROID_HOME（gradle 还需要 JAVA_HOME）
+cargo xtask package-android                 # release .so + assembleDebug（可安装的调试 APK）
+cargo xtask package-android --release       # release .so + assembleRelease（APK 也 release）
+cargo xtask package-android --skip-gradle   # 只编 .so，APK 自己打
 ```
+
+产物：
+
+- `.so`：`android/app/src/main/jniLibs/arm64-v8a/libdecktrace_core.so`（始终 release 编译）
+- debug APK：`android/app/build/outputs/apk/debug/app-debug.apk`
+- release APK：`android/app/build/outputs/apk/release/app-release*.apk`（未配置签名时为 `*-unsigned.apk`）
+
+安装：`adb install -r <上面的 apk 路径>`
+
+等价的底层命令（xtask 内部就是这两步，便于排查）：
+
+```bash
+cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p decktrace-jni
+cd android && ./gradlew assembleDebug      # --release 时是 assembleRelease
+```
+
+> 只保留 `arm64-v8a` 一个 ABI（与 `android/app/build.gradle` 的 `abiFilters` 一致）。
+> `android/app/src/main/jniLibs/` 是构建产物，已在 `.gitignore` 里，不会入库。
 
 资源/图标：`android/app/src/main/res/mipmap-*/ic_launcher.png` 由 `crates/decktrace/assets/AppIcon.png` 生成。
 

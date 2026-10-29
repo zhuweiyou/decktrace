@@ -29,13 +29,28 @@ fn main() -> Result<()> {
             install_macos(open)
         }
         Some("icon") => regenerate_icon(),
+        Some("package-android") => {
+            // 默认 .so 用 release + assembleDebug；--release 让 .so 与 APK 都走 release。
+            let mut release_apk = false;
+            let mut gradle = true;
+            while let Some(arg) = args.next() {
+                match arg.as_str() {
+                    "--release" => release_apk = true,
+                    "--skip-gradle" | "--no-gradle" => gradle = false,
+                    other => bail!("未知参数：{other}"),
+                }
+            }
+            package_android(release_apk, gradle)
+        }
         Some("help") | None => {
             println!(
-                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。"
+                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n  cargo xtask package-android [--release] [--skip-gradle]\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。\n\npackage-android：用 cargo-ndk 编 libdecktrace_core.so（arm64-v8a，release）到 android/app/src/main/jniLibs。\n默认跑 gradlew assembleDebug（release .so + debug APK）；--release 则 assembleRelease（.so 与 APK 都 release）。\n--skip-gradle 只出 .so。"
             );
             Ok(())
         }
-        Some(other) => bail!("未知 xtask：{other}（可用：package-macos / install-macos / icon）"),
+        Some(other) => bail!(
+            "未知 xtask：{other}（可用：package-macos / install-macos / icon / package-android）"
+        ),
     }
 }
 
@@ -155,6 +170,125 @@ fn regenerate_icon() -> Result<()> {
 
 /// 打包产物与安装后的应用名。Finder 里显示的就是这个文件名。
 const APP_BUNDLE: &str = "斗地主记牌器.app";
+
+/// 安卓只保留一个 ABI（当前 APK 的 abiFilters 也是 arm64-v8a）。
+const ANDROID_ABI: &str = "arm64-v8a";
+const ANDROID_RUST_TARGET: &str = "aarch64-linux-android";
+
+/// 编译 JNI 的 cdylib 到 jniLibs，再（可选）打 APK。
+///
+/// - 默认：`.so` 用 release 编译 + `assembleDebug`（可安装的调试 APK）。
+/// - `release_apk = true`（`--release`）：`.so` 与 APK 都走 release（`assembleRelease`）。
+///
+/// 产物：`android/app/src/main/jniLibs/arm64-v8a/libdecktrace_core.so`
+/// APK：debug → `app/build/outputs/apk/debug/app-debug.apk`
+///      release → `app/build/outputs/apk/release/app-release*.apk`（未签名时是 *-unsigned.apk）
+fn package_android(release_apk: bool, run_gradle: bool) -> Result<()> {
+    let root = workspace_root();
+    let android_dir = root.join("android");
+    let jni_libs = android_dir.join("app/src/main/jniLibs");
+    if !android_dir.is_dir() {
+        bail!("找不到 android 工程目录：{}", android_dir.display());
+    }
+
+    let cargo_bin = cargo();
+
+    // cargo-ndk 是 cargo 子命令，缺失时给出安装提示而不是难懂的报错。
+    let ndk_ok = Command::new(&cargo_bin)
+        .args(["ndk", "--version"])
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false);
+    if !ndk_ok {
+        bail!(
+            "未找到 cargo-ndk。请先安装：\n  cargo install cargo-ndk\n并安装安卓 Rust target：\n  rustup target add {ANDROID_RUST_TARGET}\n然后设置 ANDROID_NDK_HOME（或确保 SDK 内含 NDK）。"
+        );
+    }
+
+    // 软检查 target，缺失只提示不阻断（cargo ndk 会给出更明确的错误）。
+    if let Ok(out) = Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+    {
+        let installed = String::from_utf8_lossy(&out.stdout);
+        if !installed.lines().any(|line| line.trim() == ANDROID_RUST_TARGET) {
+            eprintln!(
+                "提示：未检测到 Rust target {ANDROID_RUST_TARGET}，如构建失败请先执行：\n  rustup target add {ANDROID_RUST_TARGET}"
+            );
+        }
+    }
+
+    fs::create_dir_all(&jni_libs)
+        .with_context(|| format!("创建 jniLibs 目录失败：{}", jni_libs.display()))?;
+
+    // .so 始终用 release 编译（debug 识别慢一个数量级，出包没有意义）。
+    println!("[1/2] cargo ndk 编译 libdecktrace_core.so（{ANDROID_ABI}，release）…");
+    let mut ndk = Command::new(&cargo_bin);
+    ndk.args(["ndk", "-t", ANDROID_ABI, "-o"])
+        .arg(&jni_libs)
+        .arg("build")
+        .arg("--release")
+        .args(["-p", "decktrace-jni"])
+        .current_dir(&root);
+    run(&mut ndk)?;
+
+    let so = jni_libs.join(ANDROID_ABI).join("libdecktrace_core.so");
+    if !so.is_file() {
+        bail!("构建完成但未找到 .so：{}", so.display());
+    }
+    println!("      → {}", so.display());
+
+    let (task, apk_rel) = if release_apk {
+        ("assembleRelease", "app/build/outputs/apk/release")
+    } else {
+        ("assembleDebug", "app/build/outputs/apk/debug")
+    };
+
+    if run_gradle {
+        println!("[2/2] gradlew {task} …");
+        let status = gradle_command(&android_dir, task)
+            .status()
+            .context("执行 gradlew 失败（需要 JDK / ANDROID_HOME）")?;
+        if !status.success() {
+            bail!("gradlew {task} 失败（{status}）");
+        }
+        let apk_dir = android_dir.join(apk_rel);
+        let apk = fs::read_dir(&apk_dir).ok().and_then(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.path())
+                .find(|path| path.extension().is_some_and(|ext| ext == "apk"))
+        });
+        match apk {
+            Some(path) => println!("      → {}", path.display()),
+            None => eprintln!("提示：未在 {} 找到 .apk（构建可能未产出）", apk_dir.display()),
+        }
+    } else {
+        println!("[2/2] 已跳过 gradle（--skip-gradle）");
+    }
+
+    println!("完成。");
+    Ok(())
+}
+
+/// 调用仓库自带的 gradle wrapper：Windows 用 `gradlew.bat`，其它平台用 `sh gradlew`
+/// （避免 git 在 Windows 上不保留可执行位导致的 permission denied）。
+fn gradle_command(android_dir: &Path, task: &str) -> Command {
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "gradlew.bat", task]);
+        cmd
+    };
+    #[cfg(not(windows))]
+    let mut cmd = {
+        let mut cmd = Command::new("sh");
+        cmd.args(["gradlew", task]);
+        cmd
+    };
+    cmd.current_dir(android_dir);
+    cmd
+}
 
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
