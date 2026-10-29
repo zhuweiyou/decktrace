@@ -1,46 +1,39 @@
 package com.zhuweiyou.decktrace;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
-import android.graphics.ColorMatrix;
-import android.graphics.ColorMatrixColorFilter;
+import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** 顶部记牌条：按剩余牌绘制，炸弹反色，底牌加“底”印。 */
+/** 顶部记牌条：两排「点数 → 剩余未出张数」表格（不显示花色）。 */
 public class OverlayView extends View {
-    private static final int CARD_W = 30;
-    private static final int CARD_H = 60;
-    private static final int GAP = 1;
-    private static final int PAD = 4;
-    private static final int MAX_COLS = 64;
+    // 按大小顺序（大王 小王 2 A K Q J 10 9 8 7 6 5 4 3），分两排：前 8 个 / 后 7 个。
+    private static final String[] RANKS =
+            {"BJ", "SJ", "2", "A", "K", "Q", "J", "10", "9", "8", "7", "6", "5", "4", "3"};
+    private static final int ROW0 = 8;
 
-    private final Map<String, Bitmap> normal = new HashMap<>();
-    private final Map<String, Bitmap> inverted = new HashMap<>();
-    private Bitmap badge;
-    private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
-    private final Paint bottomPaint = new Paint();
+    private static final int CW = 46;   // 单元格宽
+    private static final int CH = 40;   // 单元格高
+    private static final int GAP = 2;
+    private static final int PAD = 4;
+
+    private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint labelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint countPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final RectF rect = new RectF();
 
     private List<String> cards = Collections.emptyList();
-    private Set<String> bombs = Collections.emptySet();
-    private Set<String> bottom = Collections.emptySet();
 
     public interface OnDrag {
         void onDrag(float dx, float dy);
-
         void onDragEnd();
     }
 
@@ -48,29 +41,19 @@ public class OverlayView extends View {
     private float lastX;
     private float lastY;
 
-    public void setOnDrag(OnDrag listener) {
-        this.onDrag = listener;
-    }
+    public void setOnDrag(OnDrag listener) { this.onDrag = listener; }
 
     @Override
     public boolean onTouchEvent(android.view.MotionEvent event) {
         switch (event.getActionMasked()) {
             case android.view.MotionEvent.ACTION_DOWN:
-                lastX = event.getRawX();
-                lastY = event.getRawY();
-                return true;
+                lastX = event.getRawX(); lastY = event.getRawY(); return true;
             case android.view.MotionEvent.ACTION_MOVE:
-                if (onDrag != null) {
-                    onDrag.onDrag(event.getRawX() - lastX, event.getRawY() - lastY);
-                }
-                lastX = event.getRawX();
-                lastY = event.getRawY();
-                return true;
+                if (onDrag != null) onDrag.onDrag(event.getRawX() - lastX, event.getRawY() - lastY);
+                lastX = event.getRawX(); lastY = event.getRawY(); return true;
             case android.view.MotionEvent.ACTION_UP:
             case android.view.MotionEvent.ACTION_CANCEL:
-                if (onDrag != null) {
-                    onDrag.onDragEnd();
-                }
+                if (onDrag != null) onDrag.onDragEnd();
                 return true;
             default:
                 return true;
@@ -80,88 +63,71 @@ public class OverlayView extends View {
     public OverlayView(Context context) {
         super(context);
         setBackgroundColor(0xCC0A0E14);
-        bottomPaint.setStyle(Paint.Style.STROKE);
-        bottomPaint.setStrokeWidth(2.5f);
-        bottomPaint.setColor(0xFFE23B3B); // 朱红
-        try (InputStream in = context.getAssets().open("bottom_badge.png")) {
-            badge = BitmapFactory.decodeStream(in);
-        } catch (IOException ignored) {
-        }
+        bgPaint.setColor(0xFF1B2432);
+        labelPaint.setColor(0xFFB9C4D4);
+        labelPaint.setTextSize(12f);
+        labelPaint.setTextAlign(Paint.Align.CENTER);
+        countPaint.setColor(0xFFFFFFFF);
+        countPaint.setTextSize(20f);
+        countPaint.setFakeBoldText(true);
+        countPaint.setTextAlign(Paint.Align.CENTER);
     }
 
     public void setData(List<String> cards, Set<String> bombs, Set<String> bottom) {
         this.cards = cards != null ? cards : Collections.emptyList();
-        this.bombs = bombs != null ? bombs : Collections.emptySet();
-        this.bottom = bottom != null ? bottom : Collections.emptySet();
         requestLayout();
         invalidate();
     }
 
+    /** 从牌号（如 "10S" / "AH" / "BJ"）取点数。 */
+    private static String rankOf(String id) {
+        if (id == null) return "";
+        if (id.equals("BJ") || id.equals("SJ")) return id;
+        if (id.length() >= 2) return id.substring(0, id.length() - 1);
+        return id;
+    }
+
+    private Map<String, Integer> remainingByRank() {
+        Map<String, Integer> m = new HashMap<>();
+        for (String id : cards) {
+            String r = rankOf(id);
+            m.put(r, m.getOrDefault(r, 0) + 1);
+        }
+        return m;
+    }
+
+    private static int totalOf(String rank) {
+        return (rank.equals("BJ") || rank.equals("SJ")) ? 1 : 4;
+    }
+
     @Override
     protected void onMeasure(int widthSpec, int heightSpec) {
-        int count = Math.max(cards.size(), 1);
-        int cols = Math.min(count, MAX_COLS);
-        int rows = (count + MAX_COLS - 1) / MAX_COLS;
-        int width = cols * (CARD_W + GAP) + PAD * 2;
-        int height = rows * (CARD_H + GAP) + PAD * 2;
-        setMeasuredDimension(Math.max(width, 1), height);
+        int width = ROW0 * (CW + GAP) + PAD * 2;
+        int height = 2 * (CH + GAP) + PAD * 2;
+        setMeasuredDimension(width, height);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        for (int i = 0; i < cards.size(); i++) {
-            String id = cards.get(i);
-            int col = i % MAX_COLS;
-            int row = i / MAX_COLS;
-            int x = PAD + col * (CARD_W + GAP);
-            int y = PAD + row * (CARD_H + GAP);
-            Bitmap bitmap = bombs.contains(id) ? invertedBitmap(id) : normalBitmap(id);
-            if (bitmap != null) {
-                Rect dst = new Rect(x, y, x + CARD_W, y + CARD_H);
-                canvas.drawBitmap(bitmap, null, dst, paint);
-            }
-        }
+        Map<String, Integer> rem = remainingByRank();
+        for (int i = 0; i < RANKS.length; i++) {
+            int row = i < ROW0 ? 0 : 1;
+            int col = i < ROW0 ? i : (i - ROW0);
+            float x = PAD + col * (CW + GAP);
+            float y = PAD + row * (CH + GAP);
+            rect.set(x, y, x + CW, y + CH);
+            canvas.drawRoundRect(rect, 5f, 5f, bgPaint);
 
-    }
+            String rank = RANKS[i];
+            int left = rem.getOrDefault(rank, 0);
+            boolean isJoker = rank.equals("BJ") || rank.equals("SJ");
+            String label = rank.equals("BJ") ? "大王" : rank.equals("SJ") ? "小王" : rank;
 
-    private Bitmap normalBitmap(String id) {
-        if (normal.containsKey(id)) {
-            return normal.get(id);
-        }
-        Bitmap bitmap = load(id);
-        normal.put(id, bitmap);
-        return bitmap;
-    }
-
-    private Bitmap invertedBitmap(String id) {
-        if (inverted.containsKey(id)) {
-            return inverted.get(id);
-        }
-        Bitmap src = normalBitmap(id);
-        Bitmap out = null;
-        if (src != null) {
-            out = Bitmap.createBitmap(src.getWidth(), src.getHeight(), Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(out);
-            Paint p = new Paint();
-            ColorMatrix cm = new ColorMatrix(new float[]{
-                    -1, 0, 0, 0, 255,
-                    0, -1, 0, 0, 255,
-                    0, 0, -1, 0, 255,
-                    0, 0, 0, 1, 0
-            });
-            p.setColorFilter(new ColorMatrixColorFilter(cm));
-            canvas.drawBitmap(src, 0, 0, p);
-        }
-        inverted.put(id, out);
-        return out;
-    }
-
-    private Bitmap load(String id) {
-        try (InputStream in = getContext().getAssets().open("cards/" + id + ".png")) {
-            return BitmapFactory.decodeStream(in);
-        } catch (IOException e) {
-            return null;
+            canvas.drawText(label, x + CW / 2f, y + 14f, labelPaint);
+            int color = left == 0 ? 0xFF6B7686 : 0xFFFFFFFF;
+            countPaint.setColor(color);
+            canvas.drawText(String.valueOf(left), x + CW / 2f, y + CH - 8f, countPaint);
         }
     }
 }

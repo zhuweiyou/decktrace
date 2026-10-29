@@ -269,7 +269,10 @@ impl WzddzRecognizer {
             let ccy = comp.y as f32 + comp.h as f32 / 2.0;
             let in_bottom = ccx > iw2 as f32 * 0.40 && ccx < iw2 as f32 * 0.72
                 && ccy > ih2 as f32 * 0.02 && ccy < ih2 as f32 * 0.15;
-            let on_white = white_fraction(image, comp.x, comp.y, comp.w, comp.h, 0.6) > 0.30;
+            // 点数、花色都必须在白底上（普通牌判据；不依赖位置）。
+            let suit_white = white_fraction(image, comp.x, comp.y, comp.w, comp.h, 0.6);
+            let rank_white = white_fraction(image, rx, ry, rw, rh, 0.6);
+            let on_white = suit_white > 0.35 && rank_white > 0.35;
             let pass = if !on_white {
                 false
             } else if in_bottom {
