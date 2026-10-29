@@ -204,21 +204,23 @@ impl WzddzRecognizer {
             if fill < 0.15 || comp.area < 60 {
                 continue;
             }
-            let Some((rx, ry, rw, rh)) = rank_bbox(mask, comp.x, comp.y, comp.w, comp.h) else {
+            let Some((rx, ry, rw, rh)) = rank_above(mask, comp.x, comp.y, comp.w, comp.h) else {
                 continue;
             };
             let rank_crop = crop(mask, rx, ry, rw, rh);
             let (rank, rank_score, second_score) = self.classify_rank(&rank_crop);
             let suit_crop = crop(mask, comp.x, comp.y, comp.w, comp.h);
             let (suit, suit_score) = self.classify_suit(&suit_crop, color);
-            if rank_score < self.cfg.rank_min_score
-                || suit_score < self.cfg.suit_min_score
-                || rank_score - second_score < self.cfg.rank_margin
-            {
-                continue;
-            }
             let face = face_fraction(image, comp.x, comp.y, comp.w, comp.h);
-            if face < self.cfg.face_min_fraction {
+            let pass = rank_score >= self.cfg.rank_min_score
+                && suit_score >= self.cfg.suit_min_score
+                && (rank_score - second_score) >= self.cfg.rank_margin
+                && face >= self.cfg.face_min_fraction;
+            if dbg && comp.y > 900 && comp.y < 1120 {
+                eprintln!("[card] {} x={} y={} w={} h={} rank={} rs={:.2} r2={:.2} suit={} ss={:.2} face={:.2} pass={}",
+                    color, comp.x, comp.y, comp.w, comp.h, rank, rank_score, second_score, suit, suit_score, face, pass);
+            }
+            if !pass {
                 continue;
             }
             raw.push(Detection {
@@ -927,6 +929,38 @@ fn components(mask: &GrayImage) -> Vec<Comp> {
             area,
         })
         .collect()
+}
+
+/// 取花色连通域正上方的点数紧包围盒（适配王者牌面：点数在花色上方同列）。
+fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, _ch: u32) -> Option<(u32, u32, u32, u32)> {
+    let (mw, mh) = mask.dimensions();
+    let x0 = cx.saturating_sub(14);
+    let x1 = (cx + cw + 14).min(mw);
+    let y0 = cy.saturating_sub(105);
+    let y1 = cy.saturating_sub(18);
+    if y1 <= y0 || x1 <= x0 || y1 > mh {
+        return None;
+    }
+    let mut minx = u32::MAX;
+    let mut miny = u32::MAX;
+    let mut maxx = 0u32;
+    let mut maxy = 0u32;
+    let mut cnt = 0u32;
+    for yy in y0..y1 {
+        for xx in x0..x1 {
+            if mask.get_pixel(xx, yy).0[0] > 0 {
+                cnt += 1;
+                minx = minx.min(xx);
+                maxx = maxx.max(xx);
+                miny = miny.min(yy);
+                maxy = maxy.max(yy);
+            }
+        }
+    }
+    if cnt < 40 || minx == u32::MAX {
+        return None;
+    }
+    Some((minx, miny, maxx - minx + 1, maxy - miny + 1))
 }
 
 fn rank_bbox(mask: &GrayImage, sx: u32, sy: u32, sw: u32, sh: u32) -> Option<(u32, u32, u32, u32)> {
