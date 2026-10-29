@@ -20,6 +20,12 @@ struct Engine {
     recognizer: SharedRecognizer,
     tracker: CardTracker,
     started: Instant,
+    /// 是否已经看到"发完牌的手牌"（>=13 张在底部牌带），用于避免开局前误记。
+    hand_started: bool,
+    /// 手牌消失的起始时刻（秒），用于判断换局。
+    empty_since: Option<f64>,
+    /// 是否处于两局之间（手牌长时间为 0）。
+    between_rounds: bool,
 }
 
 #[unsafe(no_mangle)]
@@ -89,6 +95,9 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
         recognizer,
         tracker,
         started: Instant::now(),
+        hand_started: false,
+        empty_since: None,
+        between_rounds: false,
     };
     Box::into_raw(Box::new(Mutex::new(engine))) as jlong
 }
@@ -154,7 +163,39 @@ fn push_frame_impl(
     let det = recognition.detections.len();
     let bd = recognition.detections.iter().filter(|d| d.is_bottom).count();
     let now = engine.started.elapsed().as_secs_f64();
-    engine.tracker.observe(&recognition.detections, now);
+
+    // 底部牌带（手牌）内的检测数，用于"发到牌才开始记、换局自动重置"。
+    let hh = image.height() as f32;
+    let hand_count = recognition
+        .detections
+        .iter()
+        .filter(|d| {
+            let cy = d.bbox.1 as f32 + d.bbox.3 as f32 / 2.0;
+            cy > hh * 0.68 && cy < hh * 0.95
+        })
+        .count();
+    if !engine.hand_started {
+        if hand_count >= 13 {
+            engine.hand_started = true;
+            engine.between_rounds = false;
+            engine.empty_since = None;
+        }
+    } else if hand_count == 0 {
+        if engine.empty_since.is_none() {
+            engine.empty_since = Some(now);
+        } else if now - engine.empty_since.unwrap() > 2.0 {
+            engine.between_rounds = true;
+        }
+    } else {
+        if engine.between_rounds && hand_count >= 13 {
+            engine.tracker.reset();
+            engine.between_rounds = false;
+        }
+        engine.empty_since = None;
+    }
+    if engine.hand_started && !engine.between_rounds {
+        engine.tracker.observe(&recognition.detections, now);
+    }
     let snapshot = engine.tracker.snapshot();
     Some(encode(&engine.game, &snapshot, det, bd))
 }
