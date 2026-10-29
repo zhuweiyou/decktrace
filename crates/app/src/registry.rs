@@ -27,22 +27,22 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
         }
         other => Err(format!(
             "未知游戏：{other}，可用：{}",
-            list_games()
-                .iter()
-                .map(|game| game.id.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            GAME_IDS.join(", ")
         )),
     }
 }
 
+/// 所有可用 game id（含手机版；`--game` 与错误提示用）。
+pub const GAME_IDS: &[&str] = &["jjddz", "hlddz", "hlddz_mobile", "wzryddz"];
+
+/// 手机版游戏：没有 PC 窗口，只能走 `--capture adb` 调试或 APK/JNI，不参与 PC 窗口自动检测。
+pub fn is_mobile_game(id: &str) -> bool {
+    matches!(id, "hlddz_mobile" | "wzryddz")
+}
+
+/// PC 端“窗口自动检测”的游戏列表。**只含 PC 游戏**；手机版不在 PC 上找窗口。
 pub fn list_games() -> Vec<GameProfile> {
-    vec![
-        jjddz::profile(),
-        hlddz::profile(),
-        hlddz_mobile::profile(),
-        wzryddz::profile(),
-    ]
+    vec![jjddz::profile(), hlddz::profile()]
 }
 
 /// 为游戏创建识别器。新增游戏时在这里加一个分支。

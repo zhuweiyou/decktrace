@@ -15,6 +15,8 @@
 | 打包报重复游戏资源 | 两个游戏映射到同一目标目录 | 检查 crate 目录名是否等于 `GameProfile.id` |
 | 游戏一直等待窗口 | 窗口标题/owner 不匹配 | 检查 `WindowSelector`，临时用 `--game <id>` 调试 |
 | Windows 抓到黑屏 | PrintWindow/BitBlt 不支持硬件加速窗口 | 先让窗口前台可见；正式方案见 [Windows 采集路线](windows.md) |
+| Windows 提示 "Screen capture failed - check Screen Recording permission." | 该文案是 macOS 遗留，任何采集错误都会显示；Windows 不需要屏幕录制权限 | 看控制台真实错误；窗口需可见/非最小化；游戏是管理员权限时本程序也用管理员运行 |
+| adb 模式报采集失败 | 设备未连接/未授权调试 | `adb devices` 确认设备在线；真实错误看控制台 |
 | Windows 冒烟无法运行 | Wine 对 x86_64 PE/版本兼容性问题 | 在真实 Windows 或 Windows CI 上跑 `windows-smoke` |
 | 每次更新都要重新授权屏幕录制 | ad-hoc 签名每次构建都变 | 用本机 `decktrace-dev` 证书，`cargo xtask install-macos` |
 | codesign 报 bundle format unrecognized | `Info.plist` 写到了 `Contents/Resources/` | 必须写 `Contents/Info.plist` |

@@ -76,6 +76,7 @@ hlddz_mobile
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg`。
 - `app` 是组合根，只负责注入具体游戏和平台实现。
 - 应用默认 `--game auto`；`--game <id>` 仅用于调试覆盖。
+- 手机版游戏（`hlddz_mobile` / `wzryddz`）没有 PC 窗口：不参与 `list_games()` 的窗口自动检测，PC 上只用 `--capture adb --game <id>` 调试，正式在 APK/JNI 用。
 - 详细架构见 [docs/architecture.md](docs/architecture.md)。
 - Windows 当前是实验性 GDI，正式目标是 WGC；实现步骤和验证矩阵见 [docs/windows.md](docs/windows.md)。
 

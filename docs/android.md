@@ -29,7 +29,9 @@ adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟
 
 ### 多游戏与王者荣耀斗地主（占位）
 
-- 目前支持两个导航：`hlddz_mobile`（识别/素材已实现）和 `wzryddz`（**基础架子**，识别与模板待补）。
+- 目前支持两个手机版导航：`hlddz_mobile`（识别/素材已实现）和 `wzryddz`（**基础架子**，识别与模板待补）。
+- **手机版不参与 PC 窗口自动检测**：`list_games()` 只返回 PC 游戏（`jjddz`/`hlddz`）。
+  PC 上调试手机版必须用 `--capture adb --game hlddz_mobile|wzryddz`；正式只在 APK/JNI 里用。
 - `crates/wzryddz` 只有 `GameProfile`（id `wzryddz`）+ 占位识别器（返回空结果），
   `assets/templates` 为空目录；端上选择它能跑通采集链路，但不会识别牌。
 - JNI 的 `create(assetsDir, gameId)` 按 `gameId` 动态选择 profile 与识别器；未知 id 返回 0。

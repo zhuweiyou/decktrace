@@ -8,7 +8,7 @@ use anyhow::Result;
 use capture::{Platform, WindowInfo, select_window};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use app::{Session, SessionConfig, create_recognizer, get_game, list_games};
+use app::{Session, SessionConfig, create_recognizer, get_game, is_mobile_game, list_games};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 use tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
@@ -113,6 +113,11 @@ fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfi
     // adb 后端只有一块“设备屏幕”，无法按窗口标题匹配；直接按 --game 选定游戏。
     if platform.name() == "adb" {
         let game_id = if args.game == "auto" { "hlddz_mobile" } else { args.game.as_str() };
+        if !is_mobile_game(game_id) {
+            return Err(anyhow::anyhow!(
+                "adb 模式用于手机版（hlddz_mobile / wzryddz），不支持 --game {game_id}"
+            ));
+        }
         let game = get_game(game_id).map_err(anyhow::Error::msg)?;
         let windows = platform.window_service().list_windows(false)?;
         let window = windows
@@ -129,6 +134,12 @@ fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfi
     let windows = platform.window_service().list_windows(false)?;
 
     if args.game != "auto" {
+        if is_mobile_game(&args.game) {
+            return Err(anyhow::anyhow!(
+                "{} 是手机版，PC 端不按窗口识别；请用 --capture adb 调试或安装 APK。",
+                args.game
+            ));
+        }
         let game = get_game(&args.game).map_err(anyhow::Error::msg)?;
         let selector = window_selector(args, &game);
         return Ok(select_window(&windows, &selector)
@@ -349,8 +360,16 @@ impl eframe::App for DeckApp {
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, egui::Color32::from_rgb(241, 236, 225));
         if self.error.is_some() {
-            // egui 默认字体没有中文，错误详情已经在 worker 里输出到 stderr。
-            ui.label("Screen capture failed - check Screen Recording permission.");
+            // egui 默认字体没有中文，错误详情已经在 worker 里输出到 stderr（控制台）。
+            // 提示按平台区分，避免 Windows 上误导成 macOS 的“屏幕录制权限”。
+            let hint = if cfg!(target_os = "windows") {
+                "Capture failed. Keep the game window visible & not minimized; if the game runs as admin, run this app as admin too. Details in console."
+            } else if cfg!(target_os = "macos") {
+                "Screen capture failed - check Screen Recording permission. Details in console."
+            } else {
+                "Capture failed. Details in console."
+            };
+            ui.label(hint);
             return;
         }
         let Some(game) = self.game.as_ref() else {
