@@ -677,6 +677,98 @@ impl WzddzRecognizer {
         }
     }
 
+    /// 只认点数（不认花色）：直接在白底上检测点数字形并分类。
+    pub fn detect_ranks(&self, image: &RgbImage) -> Vec<Detection> {
+        let (w, h) = image.dimensions();
+        let scale = (w as f32 / self.cfg.reference_width.max(1) as f32).max(0.2);
+        let combined = ImageBuffer::from_fn(w, h, |x, y| {
+            let p = image.get_pixel(x, y).0;
+            let (r, g, b) = (p[0] as i32, p[1] as i32, p[2] as i32);
+            let red = r > 100 && r - g > 30 && r - b > 25;
+            let dark = r < 90 && g < 90 && b < 90;
+            Luma([if red || dark { 255 } else { 0 }])
+        });
+        let comps = components(&combined);
+        let minw = (6.0 * scale) as u32;
+        let maxw = (72.0 * scale) as u32;
+        let minh = (12.0 * scale) as u32;
+        let maxh = (100.0 * scale) as u32;
+        let mut glyphs: Vec<Comp> = Vec::new();
+        for c in comps {
+            if c.w < minw || c.w > maxw || c.h < minh || c.h > maxh {
+                continue;
+            }
+            let fill = c.area as f32 / (c.w * c.h) as f32;
+            if fill < 0.15 {
+                continue;
+            }
+            if white_fraction(image, c.x, c.y, c.w, c.h, 0.7) < 0.40 {
+                continue;
+            }
+            glyphs.push(c);
+        }
+        glyphs.sort_by_key(|c| c.x);
+        let mut groups: Vec<(u32, u32, u32, u32)> = Vec::new();
+        for c in glyphs {
+            let mut merged = false;
+            for g in groups.iter_mut() {
+                let (x0, y0, x1, y1) = *g;
+                let yov = c.y < y1 && c.y + c.h > y0;
+                let hgt = (y1 - y0).max(c.h) as f32;
+                let yov_frac = if yov {
+                    ((y1.min(c.y + c.h)) as f32 - (y0.max(c.y)) as f32) / hgt
+                } else {
+                    0.0
+                };
+                let gap = if c.x > x1 { c.x - x1 } else { x0.saturating_sub(c.x + c.w) };
+                if yov_frac > 0.6 && (gap as f32) < 0.8 * hgt {
+                    *g = (x0.min(c.x), y0.min(c.y), x1.max(c.x + c.w), y1.max(c.y + c.h));
+                    merged = true;
+                    break;
+                }
+            }
+            if !merged {
+                groups.push((c.x, c.y, c.x + c.w, c.y + c.h));
+            }
+        }
+        let mut out: Vec<Detection> = Vec::new();
+        for (x0, y0, x1, y1) in groups {
+            let cw = x1 - x0;
+            let ch = y1 - y0;
+            if cw == 0 || ch == 0 {
+                continue;
+            }
+            let rc = crop(&combined, x0, y0, cw, ch);
+            let (rank, score, second) = self.classify_rank(&rc);
+            if score < 0.45 || (score - second) < 0.05 {
+                continue;
+            }
+            out.push(Detection {
+                rank: rank.clone(),
+                suit: String::new(),
+                score,
+                bbox: (x0, y0, cw, ch),
+                rank_score: score,
+                suit_score: 0.0,
+                face_score: 0.0,
+                display: rank,
+                is_bottom: false,
+            });
+        }
+        out.sort_by(|a, b| b.score.total_cmp(&a.score));
+        let mut kept: Vec<Detection> = Vec::new();
+        for d in out {
+            let dup = kept.iter().any(|k| {
+                (k.bbox.0 as i32 - d.bbox.0 as i32).abs() < (d.bbox.2 as i32 / 2)
+                    && (k.bbox.1 as i32 - d.bbox.1 as i32).abs() < (d.bbox.3 as i32 / 2)
+            });
+            if !dup {
+                kept.push(d);
+            }
+        }
+        kept
+    }
+
     fn classify_rank(&self, crop: &GrayImage) -> (String, f32, f32) {
         if crop.width() == 0 || crop.height() == 0 {
             return (String::new(), 0.0, 0.0);
