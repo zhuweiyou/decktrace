@@ -628,8 +628,16 @@ impl WzddzRecognizer {
         if !(h_min..=h_max).contains(&h) || w < w_min || w > w_max {
             return None;
         }
+        // 真正的 JOKER 是细长竖列：高度 ≥ 宽度*4（普通牌的红桃/蝴蝶结更宽，会被排除）。
+        if (h as f32) < (w as f32) * 4.0 {
+            return None;
+        }
         // 标题栏在这个高度以上，真正的王只出现在手牌或出牌区。
         if y0 < (image.height() as f32 * 0.06) as u32 {
+            return None;
+        }
+        // 真正的王是白卡：要求白色卡面占比高，排除衣服/装饰造成的竖排误判。
+        if white_fraction(image, x0, y0, w, h, 0.4) < 0.15 {
             return None;
         }
         let red_pixels = count_nonzero(red, x0, y0, w, h);
