@@ -26,6 +26,8 @@ struct Engine {
     empty_since: Option<f64>,
     /// 是否处于两局之间（手牌长时间为 0）。
     between_rounds: bool,
+    /// 结算判定防抖计数。
+    settle_hits: u32,
 }
 
 #[unsafe(no_mangle)]
@@ -89,7 +91,7 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
     eprintln!("[jni] create game={} assets={}", game.id, assets);
 
     let game = Arc::new(game);
-    let tracker = CardTracker::new(game.clone(), 2, 0.92, 1.6);
+    let tracker = CardTracker::new(game.clone(), 3, 2.0, 1.5);
     let engine = Engine {
         game,
         recognizer,
@@ -98,6 +100,7 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
         hand_started: false,
         empty_since: None,
         between_rounds: false,
+        settle_hits: 0,
     };
     Box::into_raw(Box::new(Mutex::new(engine))) as jlong
 }
@@ -175,12 +178,18 @@ fn push_frame_impl(
         })
         .count();
     if engine.game.id == "wzddz" {
-        // 结算界面（退出/继续游戏按钮）→ 本局结束，重置。
+        // 结算/大厅（退出/继续游戏/开始匹配按钮）→ 连续 3 帧确认才结束本局（防动画抖动）。
         if hand_count < 3 && wzddz::detect_settlement(&image) {
-            engine.tracker.reset();
-            engine.hand_started = false;
-            engine.between_rounds = true;
-            engine.empty_since = None;
+            engine.settle_hits += 1;
+            if engine.settle_hits >= 3 {
+                engine.tracker.reset();
+                engine.hand_started = false;
+                engine.between_rounds = true;
+                engine.empty_since = None;
+                engine.settle_hits = 0;
+            }
+        } else {
+            engine.settle_hits = 0;
         }
         // 开局：手牌发齐(>=13) 且 底部出现底牌（亮卡存在，不要求认对 3 张）。
         let round_ready = hand_count >= 13 && wzddz::bottom_present(&image);
