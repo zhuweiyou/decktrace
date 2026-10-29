@@ -131,9 +131,10 @@ impl WzddzRecognizer {
             },
         );
         kept.extend(jokers);
-        // 欢乐斗地主的底牌会以半透明样式常驻牌桌顶部：已出的牌字形变粉/变灰，
-        // 普通红黑掩码抓不到，单独走低对比度通路。
-        kept.extend(self.detect_bottom_cards(image));
+        // 底牌低对比通路仅在启用底牌门控时使用（当前 wzddz 关闭门控，避免误报）。
+        if self.bottom.is_some() {
+            kept.extend(self.detect_bottom_cards(image));
+        }
         if timing {
             eprintln!(
                 "[timing] masks={:.0}ms total={:.0}ms",
@@ -193,7 +194,15 @@ impl WzddzRecognizer {
     fn detect_color(&self, image: &RgbImage, mask: &GrayImage, combined: &GrayImage, color: &str) -> Vec<Detection> {
         let mut raw = Vec::new();
         let dbg = std::env::var("DECKTRACE_COMPS").is_ok();
+        let (iw, ih) = image.dimensions();
         for comp in components(mask) {
+            // 顶部中间是底牌展示区（3 张小牌），单独处理；这里先忽略，避免当作已出牌。
+            if comp.y < (ih as f32 * 0.16) as u32
+                && comp.x > (iw as f32 * 0.40) as u32
+                && comp.x < (iw as f32 * 0.72) as u32
+            {
+                continue;
+            }
             if dbg && comp.y > 850 {
                 eprintln!("[comp] {} x={} y={} w={} h={} area={}", color, comp.x, comp.y, comp.w, comp.h, comp.area);
             }
@@ -251,8 +260,8 @@ impl WzddzRecognizer {
         let (width, height) = image.dimensions();
         let bx0 = (width as f32 * 0.42) as u32;
         let bx1 = ((width as f32 * 0.72) as u32).min(width);
-        let by0 = (height as f32 * 0.083) as u32;
-        let by1 = ((height as f32 * 0.20) as u32).min(height);
+        let by0 = (height as f32 * 0.02) as u32;
+        let by1 = ((height as f32 * 0.16) as u32).min(height);
         if bx1 <= bx0 + 90 || by1 <= by0 + 40 {
             return Vec::new();
         }

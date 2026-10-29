@@ -104,7 +104,7 @@ fn build(assets: PathBuf) -> GameProfile {
             },
         ],
         rank_min_score: 0.45,
-        suit_min_score: 0.45,
+        suit_min_score: 0.55,
         rank_margin: 0.03,
         face_min_fraction: 0.18,
         ..RecognitionConfig::default()
@@ -140,10 +140,7 @@ fn build(assets: PathBuf) -> GameProfile {
         reset,
         // 手机横屏小程序三张底牌在牌桌顶部正中：中心 y≈0.07，x≈0.47–0.51。
         // 区域取略大的搜索带；记牌器面板/礼包图标没有点数花色，会被识别阈值过滤。
-        bottom: Some(Arc::new(BottomConfig::new(
-            (0.42, 0.02, 0.70, 0.19),
-            3,
-            2,
-        ))),
+        // 底牌为低对比小牌，专用通路待完善；先不门控，开局即记牌。
+        bottom: None,
     }
 }
