@@ -121,11 +121,6 @@ public class OverlayView extends View {
                 Rect dst = new Rect(x, y, x + CARD_W, y + CARD_H);
                 canvas.drawBitmap(bitmap, null, dst, paint);
             }
-            if (bottom.contains(id)) {
-                // 小悬浮窗下用朱红描边标示底牌，比小印章更清楚。
-                Rect border = new Rect(x + 1, y + 1, x + CARD_W - 1, y + CARD_H - 1);
-                canvas.drawRect(border, bottomPaint);
-            }
         }
 
     }
