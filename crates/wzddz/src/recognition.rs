@@ -131,10 +131,7 @@ impl WzddzRecognizer {
             },
         );
         kept.extend(jokers);
-        // 底牌低对比通路仅在启用底牌门控时使用（当前 wzddz 关闭门控，避免误报）。
-        if self.bottom.is_some() {
-            kept.extend(self.detect_bottom_cards(image));
-        }
+        // 底牌由 detect_color 直接检出（区域标记 is_bottom），不再走额外低对比通路，避免重复。
         if timing {
             eprintln!(
                 "[timing] masks={:.0}ms total={:.0}ms",
@@ -194,19 +191,17 @@ impl WzddzRecognizer {
     fn detect_color(&self, image: &RgbImage, mask: &GrayImage, combined: &GrayImage, color: &str) -> Vec<Detection> {
         let mut raw = Vec::new();
         let dbg = std::env::var("DECKTRACE_COMPS").is_ok();
+        let scale = (image.width() as f32 / self.cfg.reference_width.max(1) as f32).max(0.1);
+        let min_side = (10.0 * scale) as u32;
+        let max_side = (95.0 * scale).round() as u32;
+        let min_area = (60.0 * scale * scale) as u32;
         let (iw, ih) = image.dimensions();
         for comp in components(mask) {
-            // 顶部中间是底牌展示区（3 张小牌），单独处理；这里先忽略，避免当作已出牌。
-            if comp.y < (ih as f32 * 0.16) as u32
-                && comp.x > (iw as f32 * 0.40) as u32
-                && comp.x < (iw as f32 * 0.72) as u32
-            {
-                continue;
-            }
-            if dbg && comp.y > 850 {
+            let _ = (iw, ih);
+            if dbg && (comp.y > 850 || comp.y < 200) {
                 eprintln!("[comp] {} x={} y={} w={} h={} area={}", color, comp.x, comp.y, comp.w, comp.h, comp.area);
             }
-            if !(10..=95).contains(&comp.w) || !(10..=95).contains(&comp.h) {
+            if comp.w < min_side || comp.w > max_side || comp.h < min_side || comp.h > max_side {
                 continue;
             }
             let aspect = comp.w as f32 / comp.h as f32;
@@ -214,10 +209,10 @@ impl WzddzRecognizer {
                 continue;
             }
             let fill = comp.area as f32 / (comp.w * comp.h) as f32;
-            if fill < 0.15 || comp.area < 60 {
+            if fill < 0.15 || comp.area < min_area {
                 continue;
             }
-            let Some((rx, ry, rw, rh)) = rank_above(combined, comp.x, comp.y, comp.w, comp.h) else {
+            let Some((rx, ry, rw, rh)) = rank_above(combined, comp.x, comp.y, comp.w, comp.h, scale) else {
                 continue;
             };
             let rank_crop = crop(mask, rx, ry, rw, rh);
@@ -228,11 +223,21 @@ impl WzddzRecognizer {
             let suit_crop = crop(mask, comp.x, comp.y, comp.w, comp.h);
             let (suit, suit_score) = self.classify_suit(&suit_crop, color);
             let face = face_fraction(image, comp.x, comp.y, comp.w, comp.h);
-            let pass = rank_score >= self.cfg.rank_min_score
-                && suit_score >= self.cfg.suit_min_score
-                && (rank_score - second_score) >= self.cfg.rank_margin
-                && face >= self.cfg.face_min_fraction;
-            if dbg && comp.y > 900 && comp.y < 1120 {
+            let (iw2, ih2) = image.dimensions();
+            let ccx = comp.x as f32 + comp.w as f32 / 2.0;
+            let ccy = comp.y as f32 + comp.h as f32 / 2.0;
+            let in_bottom = ccx > iw2 as f32 * 0.40 && ccx < iw2 as f32 * 0.72
+                && ccy > ih2 as f32 * 0.02 && ccy < ih2 as f32 * 0.15;
+            let pass = if in_bottom {
+                // 底牌是低对比小牌：只要点数/花色大致可靠就接受（用于开局门控与底牌标记）。
+                rank_score >= 0.22 && suit_score >= 0.45 && face >= 0.15
+            } else {
+                rank_score >= self.cfg.rank_min_score
+                    && suit_score >= self.cfg.suit_min_score
+                    && (rank_score - second_score) >= self.cfg.rank_margin
+                    && face >= self.cfg.face_min_fraction
+            };
+            if dbg && (comp.y < 200 || (comp.y > 900 && comp.y < 1120)) {
                 eprintln!("[card] {} x={} y={} w={} h={} rank={} rs={:.2} r2={:.2} suit={} ss={:.2} face={:.2} pass={}",
                     color, comp.x, comp.y, comp.w, comp.h, rank, rank_score, second_score, suit, suit_score, face, pass);
             }
@@ -304,9 +309,12 @@ impl WzddzRecognizer {
                 _ => runs.push((from, to)),
             }
         }
+        let bscale = (width as f32 / 1800.0).max(0.2);
+        let run_min = (100.0 * bscale) as u32;
+        let run_max = (210.0 * bscale) as u32;
         let Some((run_x0, run_x1)) = runs
             .into_iter()
-            .find(|(a, b)| (100..=210).contains(&(b - a)))
+            .find(|(a, b)| (*a >= run_min && *b <= run_max) || ((b - a) >= run_min && (b - a) <= run_max))
         else {
             return Vec::new();
         };
@@ -334,7 +342,7 @@ impl WzddzRecognizer {
         // 整条底牌区一起二值化，再按字形列聚类：不依赖卡片边界，避免描边粘连。
         let scale = 3u32;
         let (cw, ch) = (run_x1 - run_x0, y1 - y0);
-        if cw < 90 || ch < 40 || cw * scale > width * 4 {
+        if cw < (90.0 * bscale) as u32 || ch < (40.0 * bscale) as u32 || cw * scale > width * 4 {
             return Vec::new();
         }
         let card = image::imageops::crop_imm(image, bx0 + run_x0, y0, cw, ch).to_image();
@@ -952,12 +960,15 @@ fn components(mask: &GrayImage) -> Vec<Comp> {
 }
 
 /// 取花色连通域正上方的点数紧包围盒（适配王者牌面：点数在花色上方同列）。
-fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, _ch: u32) -> Option<(u32, u32, u32, u32)> {
+fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, ch: u32, scale: f32) -> Option<(u32, u32, u32, u32)> {
     let (mw, mh) = mask.dimensions();
-    let x0 = cx.saturating_sub(14);
-    let x1 = (cx + cw + 14).min(mw);
-    let y0 = cy.saturating_sub(105);
-    let y1 = cy.saturating_sub(18);
+    let pad = ((4.0 * scale) as u32).max(3);
+    let gap = ((5.0 * scale) as u32).max(2);
+    let x0 = cx.saturating_sub(cw / 6 + pad);
+    let x1 = (cx + cw + cw / 6 + pad).min(mw);
+    let _ = gap;
+    let y0 = cy.saturating_sub(ch * 2 + (8.0 * scale) as u32);
+    let y1 = cy.saturating_sub(2);
     if y1 <= y0 || x1 <= x0 || y1 > mh {
         return None;
     }
