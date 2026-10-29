@@ -188,7 +188,11 @@ impl WzddzRecognizer {
 
     fn detect_color(&self, image: &RgbImage, mask: &GrayImage, color: &str) -> Vec<Detection> {
         let mut raw = Vec::new();
+        let dbg = std::env::var("DECKTRACE_COMPS").is_ok();
         for comp in components(mask) {
+            if dbg && comp.y > 850 {
+                eprintln!("[comp] {} x={} y={} w={} h={} area={}", color, comp.x, comp.y, comp.w, comp.h, comp.area);
+            }
             if !(10..=95).contains(&comp.w) || !(10..=95).contains(&comp.h) {
                 continue;
             }

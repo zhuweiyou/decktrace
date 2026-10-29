@@ -117,6 +117,11 @@ public class OverlayController {
         });
     }
 
+    /** 悬浮窗当前是否已添加。 */
+    public boolean isShown() {
+        return view != null;
+    }
+
     public void hide() {
         ui.post(() -> {
             if (view != null) {

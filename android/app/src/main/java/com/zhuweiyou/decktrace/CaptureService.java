@@ -64,6 +64,7 @@ public class CaptureService extends Service {
     private boolean capturing = false;
     private volatile boolean running = false;
 
+
     @Override
     public void onCreate() {
         super.onCreate();
