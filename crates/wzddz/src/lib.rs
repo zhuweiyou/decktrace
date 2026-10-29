@@ -64,3 +64,31 @@ pub fn detect_settlement(image: &RgbImage) -> bool {
     // 至少一个按钮高度相似（SSE 归一化很小）
     e < 0.06 || c < 0.06
 }
+
+/// 底部是否出现底牌（看顶部中间是否有亮色卡面，不依赖认对点数/王）。
+pub fn bottom_present(image: &RgbImage) -> bool {
+    let (w, h) = image.dimensions();
+    if w < 100 || h < 100 {
+        return false;
+    }
+    let x0 = (w as f32 * 0.42) as u32;
+    let x1 = (w as f32 * 0.72) as u32;
+    let y0 = (h as f32 * 0.01) as u32;
+    let y1 = (h as f32 * 0.15) as u32;
+    let mut bright = 0u64;
+    let mut total = 0u64;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let [r, g, b] = image.get_pixel(x, y).0;
+            total += 1;
+            if r > 150 && g > 150 && b > 140 {
+                bright += 1;
+            }
+        }
+    }
+    if total == 0 {
+        return false;
+    }
+    let ratio = bright as f32 / total as f32;
+    ratio > 0.05 && ratio < 0.6
+}

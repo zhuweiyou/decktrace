@@ -174,33 +174,39 @@ fn push_frame_impl(
             cy > hh * 0.68 && cy < hh * 0.95
         })
         .count();
-    // 结算界面（退出/继续游戏按钮）→ 本局结束，重置，等待下一局。
-    if hand_count < 3 && engine.game.id == "wzddz" && wzddz::detect_settlement(&image) {
-        engine.tracker.reset();
-        engine.hand_started = false;
-        engine.between_rounds = true;
-        engine.empty_since = None;
-    }
-    if !engine.hand_started {
-        if hand_count >= 13 {
-            engine.hand_started = true;
-            engine.between_rounds = false;
+    if engine.game.id == "wzddz" {
+        // 结算界面（退出/继续游戏按钮）→ 本局结束，重置。
+        if hand_count < 3 && wzddz::detect_settlement(&image) {
+            engine.tracker.reset();
+            engine.hand_started = false;
+            engine.between_rounds = true;
             engine.empty_since = None;
         }
-    } else if hand_count == 0 {
-        if engine.empty_since.is_none() {
-            engine.empty_since = Some(now);
-        } else if now - engine.empty_since.unwrap() > 2.0 {
-            engine.between_rounds = true;
-        }
-    } else {
-        if engine.between_rounds && hand_count >= 13 {
+        // 开局：手牌发齐(>=13) 且 底部出现底牌（亮卡存在，不要求认对 3 张）。
+        let round_ready = hand_count >= 13 && wzddz::bottom_present(&image);
+        if !engine.hand_started {
+            if round_ready {
+                engine.hand_started = true;
+                engine.between_rounds = false;
+                engine.empty_since = None;
+            }
+        } else if hand_count == 0 {
+            if engine.empty_since.is_none() {
+                engine.empty_since = Some(now);
+            } else if now - engine.empty_since.unwrap() > 2.0 {
+                engine.between_rounds = true;
+            }
+        } else if engine.between_rounds && round_ready {
             engine.tracker.reset();
             engine.between_rounds = false;
+            engine.empty_since = None;
+        } else {
+            engine.empty_since = None;
         }
-        engine.empty_since = None;
-    }
-    if engine.hand_started && !engine.between_rounds {
+        if engine.hand_started && !engine.between_rounds {
+            engine.tracker.observe(&recognition.detections, now);
+        }
+    } else {
         engine.tracker.observe(&recognition.detections, now);
     }
     let snapshot = engine.tracker.snapshot();

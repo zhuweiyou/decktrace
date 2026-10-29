@@ -130,6 +130,17 @@ impl WzddzRecognizer {
                 }
             },
         );
+        let jokers: Vec<Detection> = jokers
+            .into_iter()
+            .filter(|d| {
+                let cx = d.bbox.0 as f32 + d.bbox.2 as f32 / 2.0;
+                let cy = d.bbox.1 as f32 + d.bbox.3 as f32 / 2.0;
+                cy > height as f32 * 0.68
+                    && cy < height as f32 * 0.98
+                    && cx > width as f32 * 0.15
+                    && cx < width as f32 * 0.86
+            })
+            .collect();
         kept.extend(jokers);
         // 底牌由 detect_color 直接检出（区域标记 is_bottom），不再走额外低对比通路，避免重复。
         if timing {
@@ -197,6 +208,12 @@ impl WzddzRecognizer {
         let min_area = (60.0 * scale * scale) as u32;
         let (iw, ih) = image.dimensions();
         for comp in components(mask) {
+            let ccx = comp.x as f32 + comp.w as f32 / 2.0;
+            let ccy = comp.y as f32 + comp.h as f32 / 2.0;
+            // 顶部中间是底牌展示区：不计入已出（底牌属于地主手牌，未打出不应扣）。
+            if ccy < ih as f32 * 0.15 && ccx > iw as f32 * 0.40 && ccx < iw as f32 * 0.72 {
+                continue;
+            }
             let _ = (iw, ih);
             if dbg && (comp.y > 850 || comp.y < 200) {
                 eprintln!("[comp] {} x={} y={} w={} h={} area={}", color, comp.x, comp.y, comp.w, comp.h, comp.area);
