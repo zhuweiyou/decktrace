@@ -15,19 +15,20 @@ use imageproc::template_matching::{MatchTemplateMethod, match_template};
 
 const SETTLE_EXIT: &[u8] = include_bytes!("../assets/settle_exit.png");
 const SETTLE_CONTINUE: &[u8] = include_bytes!("../assets/settle_continue.png");
+const SETTLE_START: &[u8] = include_bytes!("../assets/settle_start.png");
 
 /// 结算界面检测：返回 (exit_score, continue_score)，越小越像（SSE 归一化）。
-pub fn settlement_scores(image: &RgbImage) -> (f32, f32) {
+pub fn settlement_scores3(image: &RgbImage) -> (f32, f32, f32) {
     let (w, h) = image.dimensions();
     if w < 200 || h < 100 {
-        return (9.0, 9.0);
+        return (9.0, 9.0, 9.0);
     }
     let x0 = (w as f32 * 0.55) as u32;
     let y0 = (h as f32 * 0.78) as u32;
     let x1 = (w as f32 * 0.99) as u32;
     let y1 = (h as f32 * 0.99) as u32;
     if x1 <= x0 + 30 || y1 <= y0 + 20 {
-        return (9.0, 9.0);
+        return (9.0, 9.0, 9.0);
     }
     let region_rgb = image::imageops::crop_imm(image, x0, y0, x1 - x0, y1 - y0).to_image();
     let region = image::DynamicImage::ImageRgb8(region_rgb).to_luma8();
@@ -35,8 +36,8 @@ pub fn settlement_scores(image: &RgbImage) -> (f32, f32) {
     let sh = ((y1 - y0) / 3).max(1);
     let small = image::imageops::resize(&region, sw, sh, image::imageops::FilterType::Nearest);
     let scale = (w as f32 / 2780.0).max(0.15);
-    let mut best = [9.0f32, 9.0f32];
-    for (i, bytes) in [SETTLE_EXIT, SETTLE_CONTINUE].into_iter().enumerate() {
+    let mut best = [9.0f32, 9.0f32, 9.0f32];
+    for (i, bytes) in [SETTLE_EXIT, SETTLE_CONTINUE, SETTLE_START].into_iter().enumerate() {
         let Ok(img) = image::load_from_memory(bytes) else {
             continue;
         };
@@ -55,14 +56,14 @@ pub fn settlement_scores(image: &RgbImage) -> (f32, f32) {
             }
         }
     }
-    (best[0], best[1])
+    (best[0], best[1], best[2])
 }
 
 /// 是否处于结算界面（退出/继续游戏按钮出现）。阈值经样本标定。
 pub fn detect_settlement(image: &RgbImage) -> bool {
-    let (e, c) = settlement_scores(image);
-    // 至少一个按钮高度相似（SSE 归一化很小）
-    e < 0.06 || c < 0.06
+    let (e, c, sm) = settlement_scores3(image);
+    // 结算(退出/继续游戏) 或 大厅(开始匹配) 任一出现，即视为本局结束/未开局
+    e < 0.06 || c < 0.06 || sm < 0.06
 }
 
 /// 底部是否出现底牌（看顶部中间是否有亮色卡面，不依赖认对点数/王）。
@@ -91,4 +92,10 @@ pub fn bottom_present(image: &RgbImage) -> bool {
     }
     let ratio = bright as f32 / total as f32;
     ratio > 0.05 && ratio < 0.6
+}
+
+/// 兼容：返回 (exit, continue) 两个分数。
+pub fn settlement_scores(image: &RgbImage) -> (f32, f32) {
+    let (e, c, _s) = settlement_scores3(image);
+    (e, c)
 }
