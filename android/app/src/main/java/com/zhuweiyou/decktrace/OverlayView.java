@@ -32,6 +32,7 @@ public class OverlayView extends View {
     private final Map<String, Bitmap> inverted = new HashMap<>();
     private Bitmap badge;
     private final Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Paint bottomPaint = new Paint();
 
     private List<String> cards = Collections.emptyList();
     private Set<String> bombs = Collections.emptySet();
@@ -79,6 +80,9 @@ public class OverlayView extends View {
     public OverlayView(Context context) {
         super(context);
         setBackgroundColor(0xCC0A0E14);
+        bottomPaint.setStyle(Paint.Style.STROKE);
+        bottomPaint.setStrokeWidth(2.5f);
+        bottomPaint.setColor(0xFFE23B3B); // 朱红
         try (InputStream in = context.getAssets().open("bottom_badge.png")) {
             badge = BitmapFactory.decodeStream(in);
         } catch (IOException ignored) {
@@ -117,11 +121,10 @@ public class OverlayView extends View {
                 Rect dst = new Rect(x, y, x + CARD_W, y + CARD_H);
                 canvas.drawBitmap(bitmap, null, dst, paint);
             }
-            if (bottom.contains(id) && badge != null) {
-                int bw = Math.max(8, CARD_W / 3);
-                int bx = x + (CARD_W - bw) / 2;
-                int by = y + CARD_H - bw - 2;
-                canvas.drawBitmap(badge, null, new Rect(bx, by, bx + bw, by + bw), paint);
+            if (bottom.contains(id)) {
+                // 小悬浮窗下用朱红描边标示底牌，比小印章更清楚。
+                Rect border = new Rect(x + 1, y + 1, x + CARD_W - 1, y + CARD_H - 1);
+                canvas.drawRect(border, bottomPaint);
             }
         }
 
