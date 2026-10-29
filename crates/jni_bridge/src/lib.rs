@@ -174,6 +174,13 @@ fn push_frame_impl(
             cy > hh * 0.68 && cy < hh * 0.95
         })
         .count();
+    // 结算界面（退出/继续游戏按钮）→ 本局结束，重置，等待下一局。
+    if hand_count < 3 && engine.game.id == "wzddz" && wzddz::detect_settlement(&image) {
+        engine.tracker.reset();
+        engine.hand_started = false;
+        engine.between_rounds = true;
+        engine.empty_since = None;
+    }
     if !engine.hand_started {
         if hand_count >= 13 {
             engine.hand_started = true;
