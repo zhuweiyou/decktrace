@@ -135,10 +135,32 @@ impl WzddzRecognizer {
             .filter(|d| {
                 let cx = d.bbox.0 as f32 + d.bbox.2 as f32 / 2.0;
                 let cy = d.bbox.1 as f32 + d.bbox.3 as f32 / 2.0;
-                cy > height as f32 * 0.68
+                // 手牌带或出牌区（排除最顶部 UI / 左右角色区）
+                let pos_ok = cy > height as f32 * 0.12
                     && cy < height as f32 * 0.98
-                    && cx > width as f32 * 0.15
-                    && cx < width as f32 * 0.86
+                    && cx > width as f32 * 0.12
+                    && cx < width as f32 * 0.90;
+                if !pos_ok {
+                    return false;
+                }
+                // 真正的王是白卡：区域平均亮度要高（排除角色立绘/特效误判）
+                let (bx, by, bw, bh) = d.bbox;
+                let gx = (bw / 8).max(1);
+                let gy = (bh / 8).max(1);
+                let mut sum = 0f32;
+                let mut n = 0f32;
+                let mut yy = by;
+                while yy < by + bh {
+                    let mut xx = bx;
+                    while xx < bx + bw {
+                        let px = image.get_pixel(xx.min(width - 1), yy.min(height - 1)).0;
+                        sum += (px[0] as f32 + px[1] as f32 + px[2] as f32) / 3.0;
+                        n += 1.0;
+                        xx += gx;
+                    }
+                    yy += gy;
+                }
+                n > 0.0 && sum / n > 150.0
             })
             .collect();
         kept.extend(jokers);
@@ -211,7 +233,7 @@ impl WzddzRecognizer {
             let ccx = comp.x as f32 + comp.w as f32 / 2.0;
             let ccy = comp.y as f32 + comp.h as f32 / 2.0;
             // 顶部中间是底牌展示区：不计入已出（底牌属于地主手牌，未打出不应扣）。
-            if ccy < ih as f32 * 0.15 && ccx > iw as f32 * 0.40 && ccx < iw as f32 * 0.72 {
+            if ccy < ih as f32 * 0.13 && ccx > iw as f32 * 0.38 && ccx < iw as f32 * 0.82 {
                 continue;
             }
             let _ = (iw, ih);
@@ -245,8 +267,10 @@ impl WzddzRecognizer {
             let ccy = comp.y as f32 + comp.h as f32 / 2.0;
             let in_bottom = ccx > iw2 as f32 * 0.40 && ccx < iw2 as f32 * 0.72
                 && ccy > ih2 as f32 * 0.02 && ccy < ih2 as f32 * 0.15;
-            let pass = if in_bottom {
-                // 底牌是低对比小牌：只要点数/花色大致可靠就接受（用于开局门控与底牌标记）。
+            let on_white = white_fraction(image, comp.x, comp.y, comp.w, comp.h, 0.6) > 0.30;
+            let pass = if !on_white {
+                false
+            } else if in_bottom {
                 rank_score >= 0.22 && suit_score >= 0.45 && face >= 0.15
             } else {
                 rank_score >= self.cfg.rank_min_score
@@ -1178,6 +1202,39 @@ fn iou(a: &GrayImage, b: &GrayImage) -> f32 {
     } else {
         inter as f32 / union as f32
     }
+}
+
+/// 检测框周围“白色卡面”的占比（用于排除背景/UI/立绘误检）。
+fn white_fraction(image: &RgbImage, x: u32, y: u32, w: u32, h: u32, expand: f32) -> f32 {
+    let (iw, ih) = image.dimensions();
+    let pad = (expand * w.max(h) as f32) as u32;
+    let x0 = x.saturating_sub(pad);
+    let y0 = y.saturating_sub(pad);
+    let x1 = (x + w + pad).min(iw);
+    let y1 = (y + h + pad).min(ih);
+    if x1 <= x0 || y1 <= y0 {
+        return 0.0;
+    }
+    let sx = ((x1 - x0) / 12).max(1) as usize;
+    let sy = ((y1 - y0) / 12).max(1) as usize;
+    let mut sum = 0u32;
+    let mut n = 0u32;
+    let mut yy = y0;
+    while yy < y1 {
+        let mut xx = x0;
+        while xx < x1 {
+            let p = image.get_pixel(xx, yy).0;
+            let mx = p[0].max(p[1]).max(p[2]);
+            let mn = p[0].min(p[1]).min(p[2]);
+            if mn > 165 && (mx - mn) < 50 {
+                sum += 1;
+            }
+            n += 1;
+            xx += sx as u32;
+        }
+        yy += sy as u32;
+    }
+    if n == 0 { 0.0 } else { sum as f32 / n as f32 }
 }
 
 fn face_fraction(image: &RgbImage, x: u32, y: u32, w: u32, h: u32) -> f32 {
