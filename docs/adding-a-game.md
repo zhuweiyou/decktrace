@@ -191,7 +191,7 @@ pub fn profile() -> GameProfile {
 GUI 牌面是应用层资源，统一放在：
 
 ```text
-crates/app/assets/cards/
+crates/app/assets/gui/cards/
 ```
 
 所有游戏共用，不需要为新游戏准备牌面素材。游戏 crate 只负责识别模板。

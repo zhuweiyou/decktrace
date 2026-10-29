@@ -377,7 +377,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
     }
 
     // GUI 牌面是应用资源，所有游戏共用。
-    let app_cards = root.join("crates/app/assets/cards");
+    let app_cards = root.join("crates/app/assets/gui/cards");
     if !app_cards.is_dir() {
         bail!("缺少 GUI 牌面素材：{}", app_cards.display());
     }

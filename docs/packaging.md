@@ -33,7 +33,7 @@ bundle id `com.zhuweiyou.decktrace`，可执行文件名 `decktrace`。
 4. 拷贝 `crates/app/assets/AppIcon.icns` 到 `Contents/Resources/`
 5. 扫描 `crates/*/src/profile.rs`，识别游戏 crate
 6. 拷贝 `crates/<game>/assets` 到 `Contents/Resources/assets/<game>`
-7. 拷贝 `crates/app/assets/cards` 到 `Contents/Resources/assets/cards`
+7. 拷贝 `crates/app/assets/gui/cards` 到 `Contents/Resources/assets/cards`
 8. 写 `Contents/Info.plist` 和 `Contents/PkgInfo`
 9. 用固定证书签名，并立即 `codesign --verify` 校验
 

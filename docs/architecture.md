@@ -26,7 +26,7 @@ hlddz
 
 - `tracking` 不依赖 OS、UI、具体游戏。
 - 每个游戏 crate 只依赖 `tracking`，实现自己的 `Recognizer`。
-- GUI 牌面 `cards/` 属于应用层 `crates/app/assets/cards`，不属于游戏。
+- GUI 牌面 `cards/` 属于应用层 `crates/app/assets/gui/cards`，不属于游戏。
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg` 和 target-specific dependencies。
 - `app` 是组合根，注入具体游戏识别器和平台实现。
 - 所有内部包 `publish = false`。

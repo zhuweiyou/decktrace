@@ -473,11 +473,11 @@ fn card_assets_dir() -> PathBuf {
             }
         }
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/cards")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/gui/cards")
 }
 
 fn load_bottom_badge(ctx: &egui::Context) -> Option<egui::TextureHandle> {
-    const BADGE: &[u8] = include_bytes!("../assets/bottom_badge.png");
+    const BADGE: &[u8] = include_bytes!("../assets/gui/bottom_badge.png");
     let image = image::load_from_memory(BADGE).ok()?.to_rgba8();
     let color = egui::ColorImage::from_rgba_unmultiplied(
         [image.width() as usize, image.height() as usize],

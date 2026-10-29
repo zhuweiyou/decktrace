@@ -69,7 +69,7 @@ hlddz_mobile
 - 每个游戏一个独立 crate：`crates/<id>`，目录名必须等于 `GameProfile.id`。
 - 手机版单独开 crate（如 `hlddz_mobile`），**不要为兼容手机去改 PC 版 profile**；模板/区域/比例按平台各自标定。
 - 游戏 crate 必须有 `src/profile.rs` 和 `assets/`（识别模板）；打包靠这个约定扫描。
-- GUI 牌面 `cards/` 是应用资源，放在 `crates/app/assets/cards`，所有游戏共用。
+- GUI 牌面 `cards/` 是应用资源，放在 `crates/app/assets/gui/cards`，所有游戏共用。
 - 所有内部包 `publish = false`。
 - `tracking` 不依赖 OS、UI、具体游戏。
 - 识别实现属于各游戏 crate（如 `jjddz/src/recognition.rs`），不要恢复独立识别包。
@@ -115,8 +115,8 @@ open dist/斗地主记牌器.app                         # 运行打包产物
 - 炸弹：某点数剩余 4 张齐全，或双王都在，整组反色。不要改成第三种底色。
 - 底牌：不改变牌面底色，在牌面底部居中叠加 9×9 朱红“底”印章，距底 2px。
 - 底牌印章绘制在反色/正色之后，优先级最高。
-- 牌面素材：`crates/app/assets/cards`，应用层共用。
-- 印章素材：`crates/app/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入。
+- 牌面素材：`crates/app/assets/gui/cards`，应用层共用。
+- 印章素材：`crates/app/assets/gui/bottom_badge.png`，通过 `include_bytes!` 嵌入。
 - 窗口置顶、不可缩放；标题为“斗地主记牌器”。
 - 窗口聚焦时按 `R` 重置本局；退出时保存窗口位置。
 - 错误提示用 ASCII，避免 egui 默认字体缺中文字形。
