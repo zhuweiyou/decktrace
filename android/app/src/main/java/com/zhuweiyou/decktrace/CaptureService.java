@@ -116,14 +116,11 @@ public class CaptureService extends Service {
 
         String gameId = intent.getStringExtra(EXTRA_GAME);
         if (gameId == null || gameId.trim().isEmpty()) {
-            gameId = "hlddz_mobile";
+            gameId = "wzryddz";
         }
         String assetsRoot = new File(getFilesDir(), gameId).getAbsolutePath();
         File templatesDir = new File(assetsRoot, "templates");
-        // 目前只有欢乐斗地主有模板；王者荣耀斗地主为占位架子，先建空目录让 profile 校验通过。
-        if ("hlddz_mobile".equals(gameId)) {
-            copyAssetDir("templates", templatesDir);
-        }
+        copyAssetDir("templates", templatesDir);
         templatesDir.mkdirs();
         handle = NativeBridge.create(assetsRoot, gameId);
         android.util.Log.d("decktrace", "create game=" + gameId + " assets=" + assetsRoot);

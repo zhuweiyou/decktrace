@@ -105,7 +105,6 @@ public class MainActivity extends Activity {
         // 第二组：选择游戏开始截屏
         LinearLayout card2 = card();
         card2.addView(sectionLabel("② 选择游戏开始截屏"));
-        card2.addView(gameButton("小程序欢乐斗地主", "hlddz_mobile"));
         card2.addView(gameButton("王者荣耀斗地主", "wzryddz"));
         TextView hint = new TextView(this);
         hint.setText("选中游戏后会请求屏幕采集授权");
@@ -223,7 +222,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_CAPTURE) {
             if (resultCode == RESULT_OK && data != null) {
-                String gameId = pendingGame == null ? "hlddz_mobile" : pendingGame;
+                String gameId = pendingGame == null ? "wzryddz" : pendingGame;
                 Intent svc = new Intent(this, CaptureService.class);
                 svc.setAction(CaptureService.ACTION_START);
                 svc.putExtra(CaptureService.EXTRA_CODE, resultCode);
@@ -240,9 +239,6 @@ public class MainActivity extends Activity {
     private static String gameName(String id) {
         if ("wzryddz".equals(id)) {
             return "王者荣耀斗地主";
-        }
-        if ("hlddz_mobile".equals(id)) {
-            return "小程序欢乐斗地主";
         }
         return id;
     }

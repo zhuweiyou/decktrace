@@ -44,7 +44,7 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
         }
     };
     let game_id = if game_id.trim().is_empty() {
-        "hlddz_mobile".to_string()
+        "wzryddz".to_string()
     } else {
         game_id
     };
