@@ -1,7 +1,7 @@
 //! 手机版调试：对单张截图跑识别，打印检测结果并输出标注图。
 //!
 //! ```text
-//! cargo run --release -p hlddz-mobile --example check -- samples/frame_000032.png
+//! cargo run --release -p hlddz_mobile --example check -- samples/frame_000032.png
 //! ```
 
 use hlddz_mobile::{HlddzRecognizer, profile};

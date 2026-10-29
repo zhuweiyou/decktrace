@@ -1,9 +1,9 @@
 package com.zhuweiyou.decktrace;
 
-/** 与 Rust 端 libdecktrace_core.so 对应的 JNI 桥。 */
+/** 与 Rust 端 libjni_bridge.so 对应的 JNI 桥。 */
 public final class NativeBridge {
     static {
-        System.loadLibrary("decktrace_core");
+        System.loadLibrary("jni_bridge");
     }
 
     private NativeBridge() {}

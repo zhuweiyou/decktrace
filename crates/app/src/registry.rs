@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tracking::{GameProfile, SharedRecognizer};
 
-/// 游戏注册表。新增游戏时在这里加一个分支，并新建 `decktrace-game-xxx` crate。
+/// 游戏注册表。新增游戏时在这里加一个分支，并新建 `crates/<id>` 游戏 crate（目录名 == GameProfile.id）。
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
     match id {
         "jjddz" => {
@@ -15,7 +15,7 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
             game.validate()?;
             Ok(game)
         }
-        "hlddz-mobile" => {
+        "hlddz_mobile" => {
             let game = hlddz_mobile::profile();
             game.validate()?;
             Ok(game)
@@ -46,7 +46,7 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
             let recognizer = hlddz::HlddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))
         }
-        "hlddz-mobile" => {
+        "hlddz_mobile" => {
             let recognizer =
                 hlddz_mobile::HlddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))

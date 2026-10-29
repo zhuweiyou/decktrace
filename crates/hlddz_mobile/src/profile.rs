@@ -9,20 +9,20 @@ use tracking::{JokerBand, RecognitionConfig, ResetConfig, WindowSelector};
 fn asset_root() -> PathBuf {
     if let Ok(root) = std::env::var("DECKTRACE_ASSETS") {
         let path = PathBuf::from(root);
-        if path.join("hlddz-mobile/templates").exists() {
-            return path.join("hlddz-mobile");
+        if path.join("hlddz_mobile/templates").exists() {
+            return path.join("hlddz_mobile");
         }
         return path;
     }
     if let Ok(exe) = std::env::current_exe() {
         if let Some(contents) = exe.parent().and_then(|macos| macos.parent()) {
-            let bundled = contents.join("Resources/assets/hlddz-mobile");
+            let bundled = contents.join("Resources/assets/hlddz_mobile");
             if bundled.join("templates").exists() {
                 return bundled;
             }
         }
         if let Some(dir) = exe.parent() {
-            let adjacent = dir.join("assets/hlddz-mobile");
+            let adjacent = dir.join("assets/hlddz_mobile");
             if adjacent.join("templates").exists() {
                 return adjacent;
             }
@@ -121,7 +121,7 @@ fn build(assets: PathBuf) -> GameProfile {
     };
 
     GameProfile {
-        id: "hlddz-mobile".to_string(),
+        id: "hlddz_mobile".to_string(),
         name: "欢乐斗地主(手机)".to_string(),
         window: WindowSelector::new("欢乐斗地主"),
         templates_dir: assets.join("templates"),

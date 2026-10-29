@@ -1,5 +1,5 @@
 [package]
-name = "decktrace"
+name = "app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 jjddz = { path = "../jjddz" }
 hlddz = { path = "../hlddz" }
-hlddz-mobile = { path = "../hlddz-mobile" }
+hlddz_mobile = { path = "../hlddz_mobile" }
 capture = { path = "../capture" }
 tracking = { path = "../tracking" }
 anyhow.workspace = true

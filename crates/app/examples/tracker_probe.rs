@@ -4,11 +4,11 @@
 //!
 //! ```text
 //! # 离线回放（按给定顺序喂帧，min_hits=1，适合静态单帧）
-//! cargo run --release -p decktrace --example tracker_probe -- \
+//! cargo run --release -p app --example tracker_probe -- \
 //!     --replay a.png b.png b.png
 //!
 //! # adb 实时（默认欢乐斗地主，2 帧确认）
-//! cargo run --release -p decktrace --example tracker_probe -- \
+//! cargo run --release -p app --example tracker_probe -- \
 //!     --adb --serial 192.168.0.108:5555 --fps 2 --frames 40
 //! ```
 
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let mut crop: Option<String> = None;
     let mut fps = 2.0f32;
     let mut frames = 40usize;
-    let mut game_id = "hlddz-mobile".to_string();
+    let mut game_id = "hlddz_mobile".to_string();
     let mut min_hits = 1usize;
     let mut replay: Vec<String> = Vec::new();
     let mut dump: Option<String> = None;
@@ -48,8 +48,8 @@ fn main() -> Result<()> {
         }
     }
 
-    let game = decktrace::get_game(&game_id).map_err(|err| anyhow!(err))?;
-    let recognizer = decktrace::create_recognizer(&game).map_err(|err| anyhow!(err))?;
+    let game = app::get_game(&game_id).map_err(|err| anyhow!(err))?;
+    let recognizer = app::create_recognizer(&game).map_err(|err| anyhow!(err))?;
     // adb 单帧截图约 2s，远大于 2 帧确认的有效期，所以默认 1 帧即入账；
     // 需要更严格可用 --min-hits 2（仅在高帧率采集下有意义）。
     let tracker_hits = min_hits;

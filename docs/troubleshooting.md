@@ -27,9 +27,9 @@
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace          # 默认 auto 检测
+cargo run --release -p app          # 默认 auto 检测
 cargo xtask install-macos                 # 打包 + 签名 + 安装
 cargo xtask icon                          # 重新生成应用图标
-DECKTRACE_TIMING=1 cargo run --release -p decktrace   # 单帧耗时
-DECKTRACE_TRACE=1 cargo run --release -p decktrace    # 入账/底牌/重置逐条打印（仅调试）
+DECKTRACE_TIMING=1 cargo run --release -p app   # 单帧耗时
+DECKTRACE_TRACE=1 cargo run --release -p app    # 入账/底牌/重置逐条打印（仅调试）
 ```

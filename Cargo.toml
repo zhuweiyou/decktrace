@@ -4,10 +4,10 @@ members = [
     "crates/tracking",
     "crates/jjddz",
     "crates/hlddz",
-    "crates/hlddz-mobile",
-    "crates/decktrace-jni",
+    "crates/hlddz_mobile",
+    "crates/jni_bridge",
     "crates/capture",
-    "crates/decktrace",
+    "crates/app",
     "xtask",
 ]
 

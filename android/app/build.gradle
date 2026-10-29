@@ -19,8 +19,8 @@ android {
         main {
             // 直接复用仓库里的模板与牌面资源，避免重复拷贝
             assets.srcDirs += [
-                '../../crates/hlddz-mobile/assets',
-                '../../crates/decktrace/assets'
+                '../../crates/hlddz_mobile/assets',
+                '../../crates/app/assets'
             ]
         }
     }

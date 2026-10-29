@@ -191,7 +191,7 @@ pub fn profile() -> GameProfile {
 GUI 牌面是应用层资源，统一放在：
 
 ```text
-crates/decktrace/assets/cards/
+crates/app/assets/cards/
 ```
 
 所有游戏共用，不需要为新游戏准备牌面素材。游戏 crate 只负责识别模板。
@@ -257,7 +257,7 @@ impl Recognizer for HlddzRecognizer {
 
 ## 5. 注册游戏
 
-`crates/decktrace/src/registry.rs`：
+`crates/app/src/registry.rs`：
 
 ```rust
 pub fn get_game(id: &str) -> Result<GameProfile, String> {
@@ -296,7 +296,7 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
 }
 ```
 
-给 `crates/decktrace/Cargo.toml` 加：
+给 `crates/app/Cargo.toml` 加：
 
 ```toml
 hlddz = { path = "../hlddz" }
@@ -361,9 +361,9 @@ fn assets_are_complete() {
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace          # 自动检测
-cargo run --release -p decktrace -- --game hlddz
-DECKTRACE_TIMING=1 cargo run --release -p decktrace
+cargo run --release -p app          # 自动检测
+cargo run --release -p app -- --game hlddz
+DECKTRACE_TIMING=1 cargo run --release -p app
 ```
 
 ## 8. 调参顺序

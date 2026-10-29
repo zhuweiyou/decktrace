@@ -44,10 +44,10 @@ crates/
   tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer、CardTracker
   jjddz/       # JJ斗地主适配：profile、templates、recognition
   hlddz/       # 欢乐斗地主适配：profile、templates、recognition
-  hlddz-mobile/ # 欢乐斗地主手机横屏小程序适配（独立于 hlddz，模板/区域单独标定）
+  hlddz_mobile/ # 欢乐斗地主手机横屏小程序适配（独立于 hlddz，模板/区域单独标定）
   capture/     # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
-  decktrace/   # GUI + Session + registry（唯一发布产物）
-  decktrace-jni/ # Android JNI 桥（cdylib -> libdecktrace_core.so）
+  app/   # GUI + Session + registry（唯一发布产物）
+  jni_bridge/ # Android JNI 桥（cdylib -> libjni_bridge.so）
 android/       # 安卓 APK 工程（Java：MediaProjection 采集 + 悬浮窗）
 xtask/         # cargo xtask package-macos / install-macos / icon
 docs/          # 详细开发文档
@@ -58,22 +58,22 @@ docs/          # 详细开发文档
 ```text
 tracking
   ↑        ↑         ↑
-jjddz   capture   decktrace（应用层）
+jjddz   capture   app（应用层）
 hlddz
-hlddz-mobile
+hlddz_mobile
 ```
 
 规则：
 
 - 每个游戏一个独立 crate：`crates/<id>`，目录名必须等于 `GameProfile.id`。
-- 手机版单独开 crate（如 `hlddz-mobile`），**不要为兼容手机去改 PC 版 profile**；模板/区域/比例按平台各自标定。
+- 手机版单独开 crate（如 `hlddz_mobile`），**不要为兼容手机去改 PC 版 profile**；模板/区域/比例按平台各自标定。
 - 游戏 crate 必须有 `src/profile.rs` 和 `assets/`（识别模板）；打包靠这个约定扫描。
-- GUI 牌面 `cards/` 是应用资源，放在 `crates/decktrace/assets/cards`，所有游戏共用。
+- GUI 牌面 `cards/` 是应用资源，放在 `crates/app/assets/cards`，所有游戏共用。
 - 所有内部包 `publish = false`。
 - `tracking` 不依赖 OS、UI、具体游戏。
 - 识别实现属于各游戏 crate（如 `jjddz/src/recognition.rs`），不要恢复独立识别包。
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg`。
-- `decktrace` 是组合根，只负责注入具体游戏和平台实现。
+- `app` 是组合根，只负责注入具体游戏和平台实现。
 - 应用默认 `--game auto`；`--game <id>` 仅用于调试覆盖。
 - 详细架构见 [docs/architecture.md](docs/architecture.md)。
 - Windows 当前是实验性 GDI，正式目标是 WGC；实现步骤和验证矩阵见 [docs/windows.md](docs/windows.md)。
@@ -82,9 +82,9 @@ hlddz-mobile
 
 ```bash
 cargo test --release --workspace
-cargo run --release -p decktrace                  # 自动检测游戏窗口（默认 auto）
-cargo run --release -p decktrace -- --game hlddz  # 调试时强制指定
-cargo build --release -p decktrace                # 只编译
+cargo run --release -p app                  # 自动检测游戏窗口（默认 auto）
+cargo run --release -p app -- --game hlddz  # 调试时强制指定
+cargo build --release -p app                # 只编译
 cargo xtask package-macos                         # 生成 dist/斗地主记牌器.app
 cargo xtask install-macos                         # 打包 + 签名 + 安装到 /Applications
 cargo xtask icon                                  # 由 AppIcon.png 重新生成 icns
@@ -113,8 +113,8 @@ open dist/斗地主记牌器.app                         # 运行打包产物
 - 炸弹：某点数剩余 4 张齐全，或双王都在，整组反色。不要改成第三种底色。
 - 底牌：不改变牌面底色，在牌面底部居中叠加 9×9 朱红“底”印章，距底 2px。
 - 底牌印章绘制在反色/正色之后，优先级最高。
-- 牌面素材：`crates/decktrace/assets/cards`，应用层共用。
-- 印章素材：`crates/decktrace/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入。
+- 牌面素材：`crates/app/assets/cards`，应用层共用。
+- 印章素材：`crates/app/assets/bottom_badge.png`，通过 `include_bytes!` 嵌入。
 - 窗口置顶、不可缩放；标题为“斗地主记牌器”。
 - 窗口聚焦时按 `R` 重置本局；退出时保存窗口位置。
 - 错误提示用 ASCII，避免 egui 默认字体缺中文字形。
@@ -138,7 +138,7 @@ cargo test --release --workspace
 手工验收：
 
 ```bash
-cargo run --release -p decktrace
+cargo run --release -p app
 # 或
 cargo xtask install-macos
 ```

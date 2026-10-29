@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         }
         Some("help") | None => {
             println!(
-                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n  cargo xtask package-android [--release] [--skip-gradle]\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。\n\npackage-android：用 cargo-ndk 编 libdecktrace_core.so（arm64-v8a，release）到 android/app/src/main/jniLibs。\n默认跑 gradlew assembleDebug（release .so + debug APK）；--release 则 assembleRelease（.so 与 APK 都 release）。\n--skip-gradle 只出 .so。"
+                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n  cargo xtask package-android [--release] [--skip-gradle]\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。\n\npackage-android：用 cargo-ndk 编 libjni_bridge.so（arm64-v8a，release）到 android/app/src/main/jniLibs。\n默认跑 gradlew assembleDebug（release .so + debug APK）；--release 则 assembleRelease（.so 与 APK 都 release）。\n--skip-gradle 只出 .so。"
             );
             Ok(())
         }
@@ -121,7 +121,7 @@ fn regenerate_icon() -> Result<()> {
         bail!("icon 依赖 macOS 的 sips/iconutil");
     }
     let root = workspace_root();
-    let source = root.join("crates/decktrace/assets/AppIcon.png");
+    let source = root.join("crates/app/assets/AppIcon.png");
     if !source.is_file() {
         bail!("缺少源图标：{}", source.display());
     }
@@ -158,12 +158,12 @@ fn regenerate_icon() -> Result<()> {
         .args(["-c", "icns"])
         .arg(&iconset)
         .arg("-o")
-        .arg(root.join("crates/decktrace/assets/AppIcon.icns")))?;
+        .arg(root.join("crates/app/assets/AppIcon.icns")))?;
     run(Command::new("sips")
         .args(["-z", "128", "128"])
         .arg(&source)
         .arg("--out")
-        .arg(root.join("crates/decktrace/assets/AppIcon128.png")))?;
+        .arg(root.join("crates/app/assets/AppIcon128.png")))?;
     println!("已从 AppIcon.png 重新生成 AppIcon.icns / AppIcon128.png");
     Ok(())
 }
@@ -180,7 +180,7 @@ const ANDROID_RUST_TARGET: &str = "aarch64-linux-android";
 /// - 默认：`.so` 用 release 编译 + `assembleDebug`（可安装的调试 APK）。
 /// - `release_apk = true`（`--release`）：`.so` 与 APK 都走 release（`assembleRelease`）。
 ///
-/// 产物：`android/app/src/main/jniLibs/arm64-v8a/libdecktrace_core.so`
+/// 产物：`android/app/src/main/jniLibs/arm64-v8a/libjni_bridge.so`
 /// APK：debug → `app/build/outputs/apk/debug/app-debug.apk`
 ///      release → `app/build/outputs/apk/release/app-release*.apk`（未签名时是 *-unsigned.apk）
 fn package_android(release_apk: bool, run_gradle: bool) -> Result<()> {
@@ -222,17 +222,17 @@ fn package_android(release_apk: bool, run_gradle: bool) -> Result<()> {
         .with_context(|| format!("创建 jniLibs 目录失败：{}", jni_libs.display()))?;
 
     // .so 始终用 release 编译（debug 识别慢一个数量级，出包没有意义）。
-    println!("[1/2] cargo ndk 编译 libdecktrace_core.so（{ANDROID_ABI}，release）…");
+    println!("[1/2] cargo ndk 编译 libjni_bridge.so（{ANDROID_ABI}，release）…");
     let mut ndk = Command::new(&cargo_bin);
     ndk.args(["ndk", "-t", ANDROID_ABI, "-o"])
         .arg(&jni_libs)
         .arg("build")
         .arg("--release")
-        .args(["-p", "decktrace-jni"])
+        .args(["-p", "jni_bridge"])
         .current_dir(&root);
     run(&mut ndk)?;
 
-    let so = jni_libs.join(ANDROID_ABI).join("libdecktrace_core.so");
+    let so = jni_libs.join(ANDROID_ABI).join("libjni_bridge.so");
     if !so.is_file() {
         bail!("构建完成但未找到 .so：{}", so.display());
     }
@@ -318,7 +318,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
 
     let root = workspace_root();
     run(Command::new(cargo())
-        .args(["build", "--release", "-p", "decktrace"])
+        .args(["build", "--release", "-p", "app"])
         .current_dir(&root))?;
 
     let version = package_version(&root)?;
@@ -342,7 +342,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
     fs::copy(&binary, macos_dir.join("decktrace"))
         .with_context(|| format!("拷贝二进制失败：{}", binary.display()))?;
     fs::copy(
-        root.join("crates/decktrace/assets/AppIcon.icns"),
+        root.join("crates/app/assets/AppIcon.icns"),
         resources.join("AppIcon.icns"),
     )
     .context("拷贝 AppIcon.icns 失败")?;
@@ -377,7 +377,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
     }
 
     // GUI 牌面是应用资源，所有游戏共用。
-    let app_cards = root.join("crates/decktrace/assets/cards");
+    let app_cards = root.join("crates/app/assets/cards");
     if !app_cards.is_dir() {
         bail!("缺少 GUI 牌面素材：{}", app_cards.display());
     }
@@ -410,7 +410,7 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
 
 fn package_version(root: &Path) -> Result<String> {
     let output = Command::new(cargo())
-        .args(["pkgid", "-p", "decktrace"])
+        .args(["pkgid", "-p", "app"])
         .current_dir(root)
         .output()
         .context("执行 cargo pkgid 失败")?;

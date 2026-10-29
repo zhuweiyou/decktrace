@@ -17,13 +17,13 @@ adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟
 
 ## 手机版是独立 crate
 
-手机横屏小程序版和 PC 版布局/字号不同，**单独建 `crates/hlddz-mobile`**，
+手机横屏小程序版和 PC 版布局/字号不同，**单独建 `crates/hlddz_mobile`**，
 模板与区域、hand 比例独立标定；改它不影响 PC 版 `hlddz`。
-（`GameProfile.id = "hlddz-mobile"`，目录名与 id 一致。）
+（`GameProfile.id = "hlddz_mobile"`，目录名与 id 一致。）
 
-- 识别实现在 `crates/hlddz-mobile/src/recognition.rs`（由 `hlddz` 复制并按手机分辨率的
+- 识别实现在 `crates/hlddz_mobile/src/recognition.rs`（由 `hlddz` 复制并按手机分辨率的
   `reference_width` 缩放大小王竖排字母尺寸阈值）。
-- 模板在 `crates/hlddz-mobile/assets/templates`，当前与 PC 通用，后续按机型重采。
+- 模板在 `crates/hlddz_mobile/assets/templates`，当前与 PC 通用，后续按机型重采。
 - 底牌区域、hand 比例按 2780×1264（横屏）实测：底牌中心 y≈0.07、x≈0.47–0.51；
   手牌字形底部 ≈0.776。
 
@@ -34,20 +34,20 @@ adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟
 adb devices -l
 adb -s <serial> shell wm size        # 竖屏自然方向，如 1264x2780
 
-# 2) 桌面 GUI 实时驱动（游戏选择 hlddz-mobile）
-cargo run --release -p decktrace -- \
-    --capture adb --game hlddz-mobile --adb-serial <serial> --fps 2
+# 2) 桌面 GUI 实时驱动（游戏选择 hlddz_mobile）
+cargo run --release -p app -- \
+    --capture adb --game hlddz_mobile --adb-serial <serial> --fps 2
 
 # 3) 无头调牌（打印每帧快照，不启动 GUI）
-cargo run --release -p decktrace --example tracker_probe -- \
+cargo run --release -p app --example tracker_probe -- \
     --adb --serial <serial> --frames 40 --dump /tmp/live
 
 # 4) 离线回放（静态单帧，1 帧即入账）
-cargo run --release -p decktrace --example tracker_probe -- \
+cargo run --release -p app --example tracker_probe -- \
     --replay a.png b.png b.png
 
 # 5) 单帧识别 + 标注图
-cargo run --release -p hlddz-mobile --example check -- frame.png
+cargo run --release -p hlddz_mobile --example check -- frame.png
 ```
 
 参数/环境变量：
@@ -85,7 +85,7 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
 
 ## 阶段二/三 计划
 
-1. `cargo-ndk` 把 `tracking + hlddz-mobile` 编成 `libdecktrace_core.so`（arm64-v8a）。
+1. `cargo-ndk` 把 `tracking + hlddz_mobile` 编成 `libjni_bridge.so`（arm64-v8a）。
 2. Kotlin：`MediaProjection` + `VirtualDisplay` + `ImageReader` 取帧，
    JNI 送进 Rust，返回快照 JSON；模板资产打包解压到 `filesDir`。
 3. 原生 `WindowManager` 悬浮窗，用 `cards/` 的 54 张 PNG 绘制牌条。
@@ -100,9 +100,9 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
   释放采集并隐藏悬浮窗；旋转用 `DisplayManager` 监听自适应）。
 - `OverlayView`：顶部**单行**记牌条，可拖动；炸弹反色、底牌“底”印；底部一行状态
   `armed / seen / 剩 / det / 底`。加了 `FLAG_SECURE`（录屏里不把自己的牌拍进去）。
-- JNI：`crates/decktrace-jni` 编 `libdecktrace_core.so`（crate-type cdylib，
-  lib 名 `decktrace_core`），对外 `create/pushFrame/reset/destroy`。
-- 模板/牌面资源直接复用 `crates/hlddz-mobile/assets` 与 `crates/decktrace/assets`
+- JNI：`crates/jni_bridge` 编 `libjni_bridge.so`（crate-type cdylib，
+  lib 名 `jni_bridge`），对外 `create/pushFrame/reset/destroy`。
+- 模板/牌面资源直接复用 `crates/hlddz_mobile/assets` 与 `crates/app/assets`
   （Gradle `sourceSets.assets.srcDirs`）。
 
 构建（推荐用 xtask，一条命令出 .so + APK）：
@@ -117,7 +117,7 @@ cargo xtask package-android --skip-gradle   # 只编 .so，APK 自己打
 
 产物：
 
-- `.so`：`android/app/src/main/jniLibs/arm64-v8a/libdecktrace_core.so`（始终 release 编译）
+- `.so`：`android/app/src/main/jniLibs/arm64-v8a/libjni_bridge.so`（始终 release 编译）
 - debug APK：`android/app/build/outputs/apk/debug/app-debug.apk`
 - release APK：`android/app/build/outputs/apk/release/app-release*.apk`（未配置签名时为 `*-unsigned.apk`）
 
@@ -126,14 +126,14 @@ cargo xtask package-android --skip-gradle   # 只编 .so，APK 自己打
 等价的底层命令（xtask 内部就是这两步，便于排查）：
 
 ```bash
-cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p decktrace-jni
+cargo ndk -t arm64-v8a -o android/app/src/main/jniLibs build --release -p jni_bridge
 cd android && ./gradlew assembleDebug      # --release 时是 assembleRelease
 ```
 
 > 只保留 `arm64-v8a` 一个 ABI（与 `android/app/build.gradle` 的 `abiFilters` 一致）。
 > `android/app/src/main/jniLibs/` 是构建产物，已在 `.gitignore` 里，不会入库。
 
-资源/图标：`android/app/src/main/res/mipmap-*/ic_launcher.png` 由 `crates/decktrace/assets/AppIcon.png` 生成。
+资源/图标：`android/app/src/main/res/mipmap-*/ic_launcher.png` 由 `crates/app/assets/AppIcon.png` 生成。
 
 ## 重要已知问题：ColorOS 屏蔽微信画面
 

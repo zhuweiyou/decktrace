@@ -107,7 +107,7 @@ public class CaptureService extends Service {
             return;
         }
 
-        String assetsRoot = new File(getFilesDir(), "hlddz-mobile").getAbsolutePath();
+        String assetsRoot = new File(getFilesDir(), "hlddz_mobile").getAbsolutePath();
         copyAssetDir("templates", new File(assetsRoot, "templates"));
         handle = NativeBridge.create(assetsRoot);
         if (handle == 0) {

@@ -27,13 +27,13 @@ bundle id `com.zhuweiyou.decktrace`，可执行文件名 `decktrace`。
 
 ## package-macos 做什么
 
-1. `cargo build --release -p decktrace`
+1. `cargo build --release -p app`
 2. 重建 `dist/斗地主记牌器.app`
 3. 拷贝二进制到 `Contents/MacOS/decktrace`
-4. 拷贝 `crates/decktrace/assets/AppIcon.icns` 到 `Contents/Resources/`
+4. 拷贝 `crates/app/assets/AppIcon.icns` 到 `Contents/Resources/`
 5. 扫描 `crates/*/src/profile.rs`，识别游戏 crate
 6. 拷贝 `crates/<game>/assets` 到 `Contents/Resources/assets/<game>`
-7. 拷贝 `crates/decktrace/assets/cards` 到 `Contents/Resources/assets/cards`
+7. 拷贝 `crates/app/assets/cards` 到 `Contents/Resources/assets/cards`
 8. 写 `Contents/Info.plist` 和 `Contents/PkgInfo`
 9. 用固定证书签名，并立即 `codesign --verify` 校验
 
@@ -67,7 +67,7 @@ Contents/Resources/assets/
 
 ## App 图标
 
-- 源文件：`crates/decktrace/assets/AppIcon.png`（1024×1024）
+- 源文件：`crates/app/assets/AppIcon.png`（1024×1024）
 - 生成物：`AppIcon.icns`、`AppIcon128.png`（Dock/窗口图标）
 - 重新生成：`cargo xtask icon`（依赖 macOS 的 `sips`、`iconutil`）
 - `Info.plist` 使用 `CFBundleIconFile=AppIcon`
@@ -90,7 +90,7 @@ Contents/Resources/assets/
 - `LSMinimumSystemVersion`
 - bundle id `com.zhuweiyou.decktrace`
 
-版本号由 `cargo pkgid -p decktrace` 动态读取。
+版本号由 `cargo pkgid -p app` 动态读取。
 
 ## 签名与屏幕录制权限
 
@@ -110,7 +110,7 @@ macOS 的屏幕录制授权绑定在**代码签名**上：
 3. `security add-trusted-cert` 信任证书
 4. `security find-identity -v -p codesigning` 能看到 `decktrace-dev` 即可
 
-日常开发也可以直接 `cargo run --release -p decktrace`：子进程继承终端/IDE
+日常开发也可以直接 `cargo run --release -p app`：子进程继承终端/IDE
 的权限，不会触发授权弹窗。
 
 对外分发仍需 Developer ID Application 证书、Hardened Runtime 和公证。

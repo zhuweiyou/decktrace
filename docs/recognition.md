@@ -86,8 +86,8 @@ release、约 1800×1100：
 调试：
 
 ```bash
-DECKTRACE_TIMING=1 cargo run --release -p decktrace   # 单帧耗时
-DECKTRACE_TRACE=1 cargo run --release -p decktrace    # 入账/底牌/重置逐条打印
+DECKTRACE_TIMING=1 cargo run --release -p app   # 单帧耗时
+DECKTRACE_TRACE=1 cargo run --release -p app    # 入账/底牌/重置逐条打印
 ```
 
 `DECKTRACE_TRACE` 只用于调试：默认关闭，正式运行时不要设置。

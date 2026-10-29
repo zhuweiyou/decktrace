@@ -8,7 +8,7 @@ use anyhow::Result;
 use capture::{Platform, WindowInfo, select_window};
 use clap::Parser;
 use crossbeam_channel::{Receiver, Sender, bounded};
-use decktrace::{Session, SessionConfig, create_recognizer, get_game, list_games};
+use app::{Session, SessionConfig, create_recognizer, get_game, list_games};
 use eframe::egui;
 use image::{Rgba, RgbaImage};
 use tracking::{CardTracker, GameProfile, TrackerSnapshot, WindowSelector};
@@ -112,7 +112,7 @@ fn window_selector(args: &Args, game: &GameProfile) -> WindowSelector {
 fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfile, WindowInfo)>> {
     // adb 后端只有一块“设备屏幕”，无法按窗口标题匹配；直接按 --game 选定游戏。
     if platform.name() == "adb" {
-        let game_id = if args.game == "auto" { "hlddz-mobile" } else { args.game.as_str() };
+        let game_id = if args.game == "auto" { "hlddz_mobile" } else { args.game.as_str() };
         let game = get_game(game_id).map_err(anyhow::Error::msg)?;
         let windows = platform.window_service().list_windows(false)?;
         let window = windows

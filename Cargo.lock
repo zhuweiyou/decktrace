@@ -260,6 +260,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "capture",
+ "clap",
+ "crossbeam-channel",
+ "eframe",
+ "hlddz",
+ "hlddz_mobile",
+ "image",
+ "jjddz",
+ "tracking",
+]
+
+[[package]]
 name = "apple-cf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1020,32 +1036,6 @@ name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
-
-[[package]]
-name = "decktrace"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "capture",
- "clap",
- "crossbeam-channel",
- "eframe",
- "hlddz",
- "hlddz-mobile",
- "image",
- "jjddz",
- "tracking",
-]
-
-[[package]]
-name = "decktrace-jni"
-version = "0.1.0"
-dependencies = [
- "hlddz-mobile",
- "image",
- "jni 0.21.1",
- "tracking",
-]
 
 [[package]]
 name = "dispatch"
@@ -1873,7 +1863,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "hlddz-mobile"
+name = "hlddz_mobile"
 version = "0.1.0"
 dependencies = [
  "image",
@@ -2157,6 +2147,16 @@ checksum = "38c0b942f458fe50cdac086d2f946512305e5631e720728f2a61aabcd47a6264"
 dependencies = [
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "jni_bridge"
+version = "0.1.0"
+dependencies = [
+ "hlddz_mobile",
+ "image",
+ "jni 0.21.1",
+ "tracking",
 ]
 
 [[package]]

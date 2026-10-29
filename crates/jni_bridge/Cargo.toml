@@ -1,14 +1,17 @@
 [package]
-name = "hlddz-mobile"
+name = "jni_bridge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 publish = false
 
+[lib]
+name = "jni_bridge"
+crate-type = ["cdylib"]
+
 [dependencies]
 tracking = { path = "../tracking" }
+hlddz_mobile = { path = "../hlddz_mobile" }
 image.workspace = true
-imageproc.workspace = true
-rayon.workspace = true
-thiserror.workspace = true
+jni = "0.21"

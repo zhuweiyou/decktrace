@@ -9,7 +9,7 @@ crates/
   hlddz/       # 欢乐斗地主适配：profile、识别模板、识别实现
   capture/     # 采集契约 + WindowInfo/RawFrame + macOS/Windows cfg 实现
               # Windows 为实验 GDI 实现
-  decktrace/   # GUI + Session + registry，唯一发布产物
+  app/   # GUI + Session + registry，唯一发布产物
 xtask/         # 开发任务：package-macos / install-macos / icon
 ```
 
@@ -18,7 +18,7 @@ xtask/         # 开发任务：package-macos / install-macos / icon
 ```text
 tracking
   ↑        ↑         ↑
-jjddz   capture   decktrace（应用层）
+jjddz   capture   app（应用层）
 hlddz
 ```
 
@@ -26,9 +26,9 @@ hlddz
 
 - `tracking` 不依赖 OS、UI、具体游戏。
 - 每个游戏 crate 只依赖 `tracking`，实现自己的 `Recognizer`。
-- GUI 牌面 `cards/` 属于应用层 `crates/decktrace/assets/cards`，不属于游戏。
+- GUI 牌面 `cards/` 属于应用层 `crates/app/assets/cards`，不属于游戏。
 - `capture` 自己持有采集 trait 和平台实现，平台差异只用 `cfg` 和 target-specific dependencies。
-- `decktrace` 是组合根，注入具体游戏识别器和平台实现。
+- `app` 是组合根，注入具体游戏识别器和平台实现。
 - 所有内部包 `publish = false`。
 
 ## 数据流
