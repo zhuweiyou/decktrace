@@ -1,6 +1,9 @@
 # 斗地主记牌器（decktrace）
 
 自动识别斗地主牌面，在屏幕顶部显示一条**置顶牌条**，帮你记住还有哪些牌没出。
+
+<img width="2780" height="1264" alt="f657dbcd7d56c5de9303fc6242f1b6f4" src="https://github.com/user-attachments/assets/03a28705-0da4-4f04-bbfb-72ae4ac71b4c" />
+
 全程在本机运行，不联网、不上传截图。
 
 ## 支持的游戏
