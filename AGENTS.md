@@ -36,7 +36,7 @@ crates/
   jjddz/         # PC：JJ斗地主（profile + templates + recognition）
   hlddz/         # PC：欢乐斗地主
   hlddz_mobile/  # 手机横屏：欢乐斗地主小程序（已实现识别/素材）
-  wzddz/       # 手机：王者斗地主（基础架子：GameProfile + 占位识别器，识别/素材待补）
+  wzddz/         # 手机：王者斗地主（已实现：掩码+连通域+点数/花色模板IoU+王竖排检测+结算/大厅按钮模板）
   capture/       # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
   app/           # GUI + Session + registry（唯一桌面发布产物，二进制名 decktrace）
   jni_bridge/    # Android JNI 桥（cdylib -> libjni_bridge.so，create/pushFrame/reset/destroy）
@@ -91,7 +91,7 @@ cargo xtask package-android                          # 编 JNI .so(arm64-v8a) + 
 ## 4. 识别与底牌约定
 
 - 管线、掩码、模板格式、大小王搜索见 [docs/recognition.md](docs/recognition.md)。
-- 点数模板：高度 70，白字黑底，紧贴裁剪；花色模板：40×40，白字黑底。
+- 点数模板：白字黑底紧贴裁剪；多数游戏高度 70、宽度按比例，王者斗地主(wzddz) 用**固定 32×40 画布**；花色模板 40×40。
 - 底牌由 `GameProfile.bottom`（`BottomSpec`）决定区域/张数/稳定帧。
 - `CardTracker` 在 `armed=false` 时忽略所有排除；底牌仍计入 remaining；双王都识别后跳过王搜索。
 - 性能目标：无王 8–10ms/帧，含王 16–25ms/帧。
@@ -100,8 +100,8 @@ cargo xtask package-android                          # 编 JNI .so(arm64-v8a) + 
 
 - 牌面固定 15×30，不缩放；窗口宽度 54 张 + 边距；桌面窗口置顶、不可缩放，标题“斗地主记牌器”。
 - 炸弹：某点数剩余 4 张齐全或双王都在，整组反色（不要第三种底色）。
-- 底牌：牌面底部居中叠加 9×9 朱红“底”印章，距底 2px，绘制优先级最高。
-- Android 悬浮窗：顶部单行牌条，可拖动并持久化坐标；`FLAG_SECURE`（录屏里不拍到自己的牌）。
+- 桌面底牌：牌面底部居中叠加 9×9 朱红“底”印章，距底 2px，绘制优先级最高（Android 悬浮窗不显示底牌标识）。
+- Android 悬浮窗：顶部单行牌条，可拖动并持久化坐标；采用**单应用采集**，不设 `FLAG_SECURE`（截图不再被拦，且悬浮窗本就不在采集帧内）。
 - 桌面聚焦时按 `R` 重置；退出保存位置；错误提示用 ASCII（egui 默认字体缺中文字形）。
 
 ## 6. 测试与验收
@@ -128,7 +128,7 @@ cargo run --release -p app
 
 ```bash
 cargo xtask package-android
-adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+adb install -r android/app/build/outputs/apk/debug/王者斗地主辅助.apk
 ```
 
 检查：①「授权悬浮窗」/「停止」可用；② 点游戏开始采集；横屏显示悬浮窗牌条；点停止结束。
@@ -147,7 +147,7 @@ cargo xtask package-android # .so + APK（见 docs/android.md）
   只处理 `crates/<game>/src/profile.rs` 存在的游戏 crate；资源复制到 `Contents/Resources/assets/<game>`（目录名 == id）；
   `Info.plist` 必须写 `Contents/Info.plist`。详见 [docs/packaging.md](docs/packaging.md)。
 - Android：`cargo xtask package-android`（默认 release `.so` + `assembleDebug`；`--release` 则 `.so`/APK 都 release）。
-  Gradle `assets.srcDirs` 合并 `crates/hlddz_mobile/assets`（templates）与 `crates/app/assets/gui`（cards/、bottom_badge.png）；
+  Gradle `assets.srcDirs` 合并 `crates/wzddz/assets`（templates）与 `crates/app/assets/gui`（cards/）；
   `jniLibs` 由 cargo-ndk 生成（已在 `.gitignore`）。详见 [docs/android.md](docs/android.md)。
 - Windows 的 WGC 路线与验证矩阵见 [docs/windows.md](docs/windows.md)。
 

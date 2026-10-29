@@ -9,8 +9,8 @@
 | 阶段 | 内容 | 状态 |
 | --- | --- | --- |
 | 一 | adb 取帧 + 桌面 GUI 调试 | ✅ 已跑通 |
-| 二 | Rust 核心编成 `.so`，Kotlin 端上采集识别 | 待做 |
-| 三 | 原生悬浮窗（TYPE_APPLICATION_OVERLAY） | 待做 |
+| 二 | Rust 核心编成 `.so`，端上采集识别 | ✅ 已完成（Java） |
+| 三 | 原生悬浮窗（TYPE_APPLICATION_OVERLAY） | ✅ 已完成 |
 
 adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟**不代表产品性能**；
 产品性能在端上高帧率采集时另测。
@@ -23,20 +23,20 @@ adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟
 
 - 识别实现在 `crates/hlddz_mobile/src/recognition.rs`（由 `hlddz` 复制并按手机分辨率的
   `reference_width` 缩放大小王竖排字母尺寸阈值）。
-- 模板在 `crates/hlddz_mobile/assets/templates`，当前与 PC 通用，后续按机型重采。
+- `hlddz_mobile` 模板在 `crates/hlddz_mobile/assets/templates`；`wzddz` 模板在 `crates/wzddz/assets/templates`。
 - 底牌区域、hand 比例按 2780×1264（横屏）实测：底牌中心 y≈0.07、x≈0.47–0.51；
   手牌字形底部 ≈0.776。
 
-### 多游戏与王者斗地主（占位）
+### 多游戏与王者斗地主（已实现）
 
-- 目前支持两个手机版导航：`hlddz_mobile`（识别/素材已实现）和 `wzddz`（**基础架子**，识别与模板待补）。
+- 手机版导航：`hlddz_mobile`（欢乐斗地主小程序）与 `wzddz`（**王者荣耀·王者斗地主**），两者识别/素材均已实现。
 - **手机版不参与 PC 窗口自动检测**：`list_games()` 只返回 PC 游戏（`jjddz`/`hlddz`）。
   PC 上调试手机版必须用 `--capture adb --game hlddz_mobile|wzddz`；正式只在 APK/JNI 里用。
-- `crates/wzddz` 只有 `GameProfile`（id `wzddz`）+ 占位识别器（返回空结果），
-  `assets/templates` 为空目录；端上选择它能跑通采集链路，但不会识别牌。
+- `crates/wzddz`：`GameProfile`（id `wzddz`）+ 真实识别器（掩码/连通域/点数·花色模板 IoU/王竖排/结算·大厅按钮模板），
+  模板在 `crates/wzddz/assets/templates`。
 - JNI 的 `create(assetsDir, gameId)` 按 `gameId` 动态选择 profile 与识别器；未知 id 返回 0。
-- 端上资源按游戏分目录放到 `filesDir/<gameId>/templates`；`wzddz` 暂无模板，仅建空目录。
-  等真实素材就绪后再给 APK 资产做 per-game 命名空间（当前 gradle 仍复用 `hlddz_mobile/assets`）。
+- 端上资源按游戏分目录复制到 `filesDir/<gameId>/templates`（wzddz 会复制其模板目录）。
+- **APK 资产直接来自 `crates/wzddz/assets`**（`android/app/build.gradle` 的 `assets.srcDirs`）。
 
 ## 阶段一用法
 
@@ -94,7 +94,7 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
 - Rust 目标：`aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`
 - `cargo-ndk 4.1.2`
 
-## 阶段二/三 计划
+## 阶段二/三 方案（已实现）
 
 1. `cargo-ndk` 把 `tracking + hlddz_mobile` 编成 `libjni_bridge.so`（arm64-v8a）。
 2. Kotlin：`MediaProjection` + `VirtualDisplay` + `ImageReader` 取帧，
@@ -110,12 +110,12 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
 - `CaptureService`：前台服务（`mediaProjection` 类型），`MediaProjection` + `VirtualDisplay`
   + `ImageReader` 取帧 → `NativeBridge.pushFrame` → 刷新悬浮窗。只在横屏采集（竖屏视为不在游戏中，
   释放采集并隐藏悬浮窗；旋转用 `DisplayManager` 监听自适应）。
-- `OverlayView`：顶部**单行**记牌条，可拖动；炸弹反色、底牌“底”印；底部一行状态
-  `armed / seen / 剩 / det / 底`。加了 `FLAG_SECURE`（录屏里不把自己的牌拍进去）。
+- `OverlayView`：顶部**单行**记牌条，可拖动；炸弹反色；不显示底牌标识。
+  **不设 `FLAG_SECURE`**：采用单应用采集，悬浮窗本就不在采集帧内，且去掉后手机截屏不再被“版权限制”拦截。
 - JNI：`crates/jni_bridge` 编 `libjni_bridge.so`（crate-type cdylib，
   lib 名 `jni_bridge`），对外 `create(assetsDir, gameId)/pushFrame/reset/destroy`；
   `create` 按 `gameId`（`hlddz_mobile` / `wzddz`）动态选择 profile 与识别器，未知 id 返回 0。
-- 模板/牌面资源直接复用 `crates/hlddz_mobile/assets` 与 `crates/app/assets/gui`
+- 模板/牌面资源来自 `crates/wzddz/assets`（templates）与 `crates/app/assets/gui`（cards/）
   （Gradle `sourceSets.assets.srcDirs`）。
 
 构建（推荐用 xtask，一条命令出 .so + APK）：
@@ -131,8 +131,8 @@ cargo xtask package-android --skip-gradle   # 只编 .so，APK 自己打
 产物：
 
 - `.so`：`android/app/src/main/jniLibs/arm64-v8a/libjni_bridge.so`（始终 release 编译）
-- debug APK：`android/app/build/outputs/apk/debug/app-debug.apk`
-- release APK：`android/app/build/outputs/apk/release/app-release*.apk`（未配置签名时为 `*-unsigned.apk`）
+- debug APK：`android/app/build/outputs/apk/debug/王者斗地主辅助.apk`
+- release APK：`android/app/build/outputs/apk/release/王者斗地主辅助.apk`（release 已用 debug 签名，可直接安装）
 
 安装：`adb install -r <上面的 apk 路径>`
 
@@ -155,6 +155,5 @@ cd android && ./gradlew assembleDebug      # --release 时是 assembleRelease
 `adb exec-out screencap` 是特权通道，能看到画面，所以容易误判为识别问题。
 
 - 现场可点提示里的「解除屏蔽」放行；但这是系统/微信的隐私保护，不稳定。
-- 结论：采集链路已跑通（帧尺寸/stride/送入识别均正常），但**微信小程序这条路线受系统限制**。
-- 决策：APK 保持「单应用采集 + 单行记牌条 + 可拖动」，先不做微信特化；
-  下一步做**非微信（独立 App / 可正常录屏）的游戏版本**再端到端验证。
+- 结论：微信小程序这条路线受系统限制；已转向**独立 App「王者荣耀·王者斗地主」**，单应用采集可正常录屏与识别。
+- 当前正式目标就是王者斗地主（单应用采集 + 悬浮窗记牌），微信小程序路线不再作为主推。

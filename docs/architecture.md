@@ -4,22 +4,26 @@
 
 ```text
 crates/
-  tracking/    # 记牌领域：模型、GameProfile/BottomSpec、Recognizer 契约、CardTracker
-  jjddz/       # JJ斗地主适配：profile、识别模板、识别实现
-  hlddz/       # 欢乐斗地主适配：profile、识别模板、识别实现
-  capture/     # 采集契约 + WindowInfo/RawFrame + macOS/Windows cfg 实现
-              # Windows 为实验 GDI 实现
-  app/   # GUI + Session + registry，唯一发布产物
-xtask/         # 开发任务：package-macos / install-macos / icon
+  tracking/      # 记牌领域：模型、GameProfile/BottomSpec、Recognizer 契约、CardTracker
+  jjddz/         # PC：JJ斗地主（profile + templates + recognition）
+  hlddz/         # PC：欢乐斗地主
+  hlddz_mobile/  # 手机横屏：欢乐斗地主小程序（已实现识别/素材）
+  wzddz/         # 手机：王者斗地主（已实现识别/素材）
+  capture/       # 采集契约 + RawFrame + macOS/Windows cfg 实现 + adb 调试后端
+  app/           # GUI + Session + registry（唯一桌面发布产物）
+  jni_bridge/    # Android JNI 桥（cdylib -> libjni_bridge.so）
+android/         # Android APK 工程（Java：MediaProjection 采集 + 悬浮窗）
+xtask/           # 开发任务：package-macos / install-macos / icon / package-android
 ```
 
 依赖方向：
 
 ```text
-tracking
-  ↑        ↑         ↑
-jjddz   capture   app（应用层）
-hlddz
+        tracking
+      ↑     ↑      ↑
+ jjddz   capture  app（应用层，组合根）
+ hlddz                    ↑
+ hlddz_mobile / wzddz ── jni_bridge（Android .so）
 ```
 
 规则：
@@ -42,6 +46,15 @@ ScreenCaptureKit
   → CardTracker
   → snapshot channel
   → egui GUI
+```
+
+Android（端上采集 + 端上识别）：
+
+```text
+MediaProjection → VirtualDisplay → ImageReader（后台线程，单应用采集）
+  → CaptureService → NativeBridge.pushFrame(RGB,w,h,rowStride)（JNI）
+  → wzddz::WzddzRecognizer.recognize → CardTracker.observe → encode 快照字符串
+  → OverlayView（TYPE_APPLICATION_OVERLAY 悬浮窗）
 ```
 
 ## 线程
