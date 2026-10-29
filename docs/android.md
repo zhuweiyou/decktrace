@@ -27,15 +27,15 @@ adb 只是「取帧器」，它的帧率（单帧 `screencap` 约 2s）和延迟
 - 底牌区域、hand 比例按 2780×1264（横屏）实测：底牌中心 y≈0.07、x≈0.47–0.51；
   手牌字形底部 ≈0.776。
 
-### 多游戏与王者荣耀斗地主（占位）
+### 多游戏与王者斗地主（占位）
 
-- 目前支持两个手机版导航：`hlddz_mobile`（识别/素材已实现）和 `wzryddz`（**基础架子**，识别与模板待补）。
+- 目前支持两个手机版导航：`hlddz_mobile`（识别/素材已实现）和 `wzddz`（**基础架子**，识别与模板待补）。
 - **手机版不参与 PC 窗口自动检测**：`list_games()` 只返回 PC 游戏（`jjddz`/`hlddz`）。
-  PC 上调试手机版必须用 `--capture adb --game hlddz_mobile|wzryddz`；正式只在 APK/JNI 里用。
-- `crates/wzryddz` 只有 `GameProfile`（id `wzryddz`）+ 占位识别器（返回空结果），
+  PC 上调试手机版必须用 `--capture adb --game hlddz_mobile|wzddz`；正式只在 APK/JNI 里用。
+- `crates/wzddz` 只有 `GameProfile`（id `wzddz`）+ 占位识别器（返回空结果），
   `assets/templates` 为空目录；端上选择它能跑通采集链路，但不会识别牌。
 - JNI 的 `create(assetsDir, gameId)` 按 `gameId` 动态选择 profile 与识别器；未知 id 返回 0。
-- 端上资源按游戏分目录放到 `filesDir/<gameId>/templates`；`wzryddz` 暂无模板，仅建空目录。
+- 端上资源按游戏分目录放到 `filesDir/<gameId>/templates`；`wzddz` 暂无模板，仅建空目录。
   等真实素材就绪后再给 APK 资产做 per-game 命名空间（当前 gradle 仍复用 `hlddz_mobile/assets`）。
 
 ## 阶段一用法
@@ -106,7 +106,7 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
 工程在 `android/`（Java + 原生 View，无 AndroidX）：
 
 - `MainActivity`：竖屏配置页，分两组：① 悬浮窗授权 + 停止；② 选择游戏开始截屏
-  （小程序欢乐斗地主 / 王者荣耀斗地主）。
+  （小程序欢乐斗地主 / 王者斗地主）。
 - `CaptureService`：前台服务（`mediaProjection` 类型），`MediaProjection` + `VirtualDisplay`
   + `ImageReader` 取帧 → `NativeBridge.pushFrame` → 刷新悬浮窗。只在横屏采集（竖屏视为不在游戏中，
   释放采集并隐藏悬浮窗；旋转用 `DisplayManager` 监听自适应）。
@@ -114,7 +114,7 @@ Windows 兼容：`adb` 会自动解析为 `adb.exe`（无需手动加后缀）�
   `armed / seen / 剩 / det / 底`。加了 `FLAG_SECURE`（录屏里不把自己的牌拍进去）。
 - JNI：`crates/jni_bridge` 编 `libjni_bridge.so`（crate-type cdylib，
   lib 名 `jni_bridge`），对外 `create(assetsDir, gameId)/pushFrame/reset/destroy`；
-  `create` 按 `gameId`（`hlddz_mobile` / `wzryddz`）动态选择 profile 与识别器，未知 id 返回 0。
+  `create` 按 `gameId`（`hlddz_mobile` / `wzddz`）动态选择 profile 与识别器，未知 id 返回 0。
 - 模板/牌面资源直接复用 `crates/hlddz_mobile/assets` 与 `crates/app/assets/gui`
   （Gradle `sourceSets.assets.srcDirs`）。
 

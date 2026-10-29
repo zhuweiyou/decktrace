@@ -115,7 +115,7 @@ fn detect_game(platform: &dyn Platform, args: &Args) -> Result<Option<(GameProfi
         let game_id = if args.game == "auto" { "hlddz_mobile" } else { args.game.as_str() };
         if !is_mobile_game(game_id) {
             return Err(anyhow::anyhow!(
-                "adb 模式用于手机版（hlddz_mobile / wzryddz），不支持 --game {game_id}"
+                "adb 模式用于手机版（hlddz_mobile / wzddz），不支持 --game {game_id}"
             ));
         }
         let game = get_game(game_id).map_err(anyhow::Error::msg)?;

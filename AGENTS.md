@@ -36,7 +36,7 @@ crates/
   jjddz/         # PC：JJ斗地主（profile + templates + recognition）
   hlddz/         # PC：欢乐斗地主
   hlddz_mobile/  # 手机横屏：欢乐斗地主小程序（已实现识别/素材）
-  wzryddz/       # 手机：王者荣耀斗地主（基础架子：GameProfile + 占位识别器，识别/素材待补）
+  wzddz/       # 手机：王者斗地主（基础架子：GameProfile + 占位识别器，识别/素材待补）
   capture/       # 采集 trait + WindowInfo/RawFrame + macOS/Windows cfg 实现 + adb 调试后端
   app/           # GUI + Session + registry（唯一桌面发布产物，二进制名 decktrace）
   jni_bridge/    # Android JNI 桥（cdylib -> libjni_bridge.so，create/pushFrame/reset/destroy）
@@ -52,13 +52,13 @@ tracking
   ↑        ↑         ↑
 jjddz   capture   app（应用层）
 hlddz
-hlddz_mobile / wzryddz
+hlddz_mobile / wzddz
 ```
 
 规则：
 
 - 每个游戏一个独立 crate：`crates/<id>`，**目录名 == `GameProfile.id`**。
-- 手机版单独开 crate（`hlddz_mobile` / `wzryddz`），不要为兼容手机改 PC 版 profile；模板/区域/比例各自标定。
+- 手机版单独开 crate（`hlddz_mobile` / `wzddz`），不要为兼容手机改 PC 版 profile；模板/区域/比例各自标定。
 - 游戏 crate 必须有 `src/profile.rs` 和 `assets/`（识别模板）；打包按此约定扫描。
 - GUI 牌面/印章是应用资源：`crates/app/assets/gui/{cards,bottom_badge.png}`；
   `crates/app/assets/AppIcon*` 只给 macOS 打包/Dock，**不进 APK**。

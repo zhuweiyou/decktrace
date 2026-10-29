@@ -1,5 +1,5 @@
 [package]
-name = "wzryddz"
+name = "wzddz"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,4 +9,6 @@ publish = false
 [dependencies]
 tracking = { path = "../tracking" }
 image.workspace = true
+imageproc.workspace = true
+rayon.workspace = true
 thiserror.workspace = true

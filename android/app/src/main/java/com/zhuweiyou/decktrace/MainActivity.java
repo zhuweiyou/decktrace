@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("王者荣耀斗地主 · 自动识别 · 悬浮窗记牌");
+        subtitle.setText("王者斗地主 · 自动识别 · 悬浮窗记牌");
         subtitle.setTextColor(MUTED);
         subtitle.setTextSize(13);
         subtitle.setPadding(0, dp(4), 0, dp(16));
@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
         warn.setTextSize(12);
         warn.setPadding(dp(4), dp(2), dp(4), dp(10));
         card2.addView(warn);
-        card2.addView(gameButton("王者荣耀斗地主", "wzryddz"));
+        card2.addView(gameButton("王者斗地主", "wzddz"));
         TextView hint = new TextView(this);
         hint.setText("选中游戏后会请求屏幕采集授权");
         hint.setTextColor(0xFF6F7E93);
@@ -210,6 +210,8 @@ public class MainActivity extends Activity {
             status.setText("请先授予悬浮窗权限");
             return;
         }
+        // 先停掉可能在运行/挂起的旧会话，否则服务里 running=true 会导致新按钮无效
+        stopCapture();
         pendingGame = gameId;
         status.setText("请在系统弹窗选「单个应用」→「" + gameName(gameId) + "」…");
         Intent intent = mpm.createScreenCaptureIntent();
@@ -228,7 +230,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQ_CAPTURE) {
             if (resultCode == RESULT_OK && data != null) {
-                String gameId = pendingGame == null ? "wzryddz" : pendingGame;
+                String gameId = pendingGame == null ? "wzddz" : pendingGame;
                 Intent svc = new Intent(this, CaptureService.class);
                 svc.setAction(CaptureService.ACTION_START);
                 svc.putExtra(CaptureService.EXTRA_CODE, resultCode);
@@ -243,8 +245,8 @@ public class MainActivity extends Activity {
     }
 
     private static String gameName(String id) {
-        if ("wzryddz".equals(id)) {
-            return "王者荣耀斗地主";
+        if ("wzddz".equals(id)) {
+            return "王者斗地主";
         }
         return id;
     }

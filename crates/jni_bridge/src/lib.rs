@@ -44,7 +44,7 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
         }
     };
     let game_id = if game_id.trim().is_empty() {
-        "wzryddz".to_string()
+        "wzddz".to_string()
     } else {
         game_id
     };
@@ -61,12 +61,12 @@ pub extern "system" fn Java_com_zhuweiyou_decktrace_NativeBridge_create(
                 }
             }
         }
-        "wzryddz" => {
-            let game = wzryddz::profile_with_assets(assets_path);
-            match wzryddz::WzryddzRecognizer::new(&game) {
+        "wzddz" => {
+            let game = wzddz::profile_with_assets(assets_path);
+            match wzddz::WzddzRecognizer::new(&game) {
                 Ok(rec) => (game, Arc::new(rec) as SharedRecognizer),
                 Err(err) => {
-                    eprintln!("[jni] wzryddz 识别器初始化失败：{err}");
+                    eprintln!("[jni] wzddz 识别器初始化失败：{err}");
                     return 0;
                 }
             }

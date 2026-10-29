@@ -19,7 +19,7 @@ android {
         main {
             // 直接复用仓库里的模板与牌面资源，避免重复拷贝
             assets.srcDirs += [
-                '../../crates/wzryddz/assets',
+                '../../crates/wzddz/assets',
                 '../../crates/app/assets/gui'
             ]
         }

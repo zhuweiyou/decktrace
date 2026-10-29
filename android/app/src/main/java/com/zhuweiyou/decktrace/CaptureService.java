@@ -116,7 +116,7 @@ public class CaptureService extends Service {
 
         String gameId = intent.getStringExtra(EXTRA_GAME);
         if (gameId == null || gameId.trim().isEmpty()) {
-            gameId = "wzryddz";
+            gameId = "wzddz";
         }
         String assetsRoot = new File(getFilesDir(), gameId).getAbsolutePath();
         File templatesDir = new File(assetsRoot, "templates");
@@ -160,9 +160,14 @@ public class CaptureService extends Service {
         android.util.Log.d("decktrace", "refresh w=" + dm.widthPixels + " h=" + dm.heightPixels
                 + " land=" + landscape + " capturing=" + capturing);
         if (landscape) {
-            if (!capturing || dm.widthPixels != width || dm.heightPixels != height
-                    || dm.densityDpi != density) {
-                setupCapture(dm.widthPixels, dm.heightPixels, dm.densityDpi);
+            try {
+                if (!capturing || dm.widthPixels != width || dm.heightPixels != height
+                        || dm.densityDpi != density) {
+                    setupCapture(dm.widthPixels, dm.heightPixels, dm.densityDpi);
+                }
+            } catch (Throwable t) {
+                android.util.Log.e("decktrace", "setupCapture failed: " + t);
+                capturing = false;
             }
             if (overlay != null) {
                 overlay.show();

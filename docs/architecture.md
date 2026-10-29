@@ -58,7 +58,7 @@ ScreenCaptureKit
 
 - `--game auto` 是默认值。
 - worker 调用 `list_games()`，对每个 `GameProfile.window` 做窗口匹配。
-- `list_games()` **只含 PC 游戏**（`jjddz`/`hlddz`）；手机版（`hlddz_mobile`/`wzryddz`）没有 PC 窗口，走 adb 调试或 APK/JNI，不参与自动检测。
+- `list_games()` **只含 PC 游戏**（`jjddz`/`hlddz`）；手机版（`hlddz_mobile`/`wzddz`）没有 PC 窗口，走 adb 调试或 APK/JNI，不参与自动检测。
 - 只匹配到一个游戏：直接使用。
 - 多个匹配：按注册顺序使用第一个，并在 stderr 提示。
 - 无匹配：GUI 显示等待，worker 每 500ms 重试。

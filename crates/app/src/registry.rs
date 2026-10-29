@@ -20,8 +20,8 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
             game.validate()?;
             Ok(game)
         }
-        "wzryddz" => {
-            let game = wzryddz::profile();
+        "wzddz" => {
+            let game = wzddz::profile();
             game.validate()?;
             Ok(game)
         }
@@ -33,11 +33,11 @@ pub fn get_game(id: &str) -> Result<GameProfile, String> {
 }
 
 /// 所有可用 game id（含手机版；`--game` 与错误提示用）。
-pub const GAME_IDS: &[&str] = &["jjddz", "hlddz", "hlddz_mobile", "wzryddz"];
+pub const GAME_IDS: &[&str] = &["jjddz", "hlddz", "hlddz_mobile", "wzddz"];
 
 /// 手机版游戏：没有 PC 窗口，只能走 `--capture adb` 调试或 APK/JNI，不参与 PC 窗口自动检测。
 pub fn is_mobile_game(id: &str) -> bool {
-    matches!(id, "hlddz_mobile" | "wzryddz")
+    matches!(id, "hlddz_mobile" | "wzddz")
 }
 
 /// PC 端“窗口自动检测”的游戏列表。**只含 PC 游戏**；手机版不在 PC 上找窗口。
@@ -61,9 +61,9 @@ pub fn create_recognizer(game: &GameProfile) -> Result<SharedRecognizer, String>
                 hlddz_mobile::HlddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))
         }
-        "wzryddz" => {
+        "wzddz" => {
             let recognizer =
-                wzryddz::WzryddzRecognizer::new(game).map_err(|err| err.to_string())?;
+                wzddz::WzddzRecognizer::new(game).map_err(|err| err.to_string())?;
             Ok(Arc::new(recognizer))
         }
         other => Err(format!("没有为游戏 {other} 注册识别器")),
