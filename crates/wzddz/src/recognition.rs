@@ -215,7 +215,7 @@ impl WzddzRecognizer {
                 continue;
             }
             let _ = (iw, ih);
-            if dbg && (comp.y > 850 || comp.y < 200) {
+            if dbg {
                 eprintln!("[comp] {} x={} y={} w={} h={} area={}", color, comp.x, comp.y, comp.w, comp.h, comp.area);
             }
             if comp.w < min_side || comp.w > max_side || comp.h < min_side || comp.h > max_side {
@@ -254,7 +254,7 @@ impl WzddzRecognizer {
                     && (rank_score - second_score) >= self.cfg.rank_margin
                     && face >= self.cfg.face_min_fraction
             };
-            if dbg && (comp.y < 200 || (comp.y > 900 && comp.y < 1120)) {
+            if dbg {
                 eprintln!("[card] {} x={} y={} w={} h={} rank={} rs={:.2} r2={:.2} suit={} ss={:.2} face={:.2} pass={}",
                     color, comp.x, comp.y, comp.w, comp.h, rank, rank_score, second_score, suit, suit_score, face, pass);
             }

@@ -103,9 +103,9 @@ fn build(assets: PathBuf) -> GameProfile {
                 scales: vec![0.92, 1.00, 1.08],
             },
         ],
-        rank_min_score: 0.45,
+        rank_min_score: 0.40,
         suit_min_score: 0.55,
-        rank_margin: 0.03,
+        rank_margin: 0.01,
         face_min_fraction: 0.18,
         ..RecognitionConfig::default()
     };
