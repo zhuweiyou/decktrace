@@ -42,14 +42,15 @@ fn main() -> Result<()> {
             }
             package_android(release_apk, gradle)
         }
+        Some("package-windows") => package_windows(),
         Some("help") | None => {
             println!(
-                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n  cargo xtask package-android [--release] [--skip-gradle]\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。\n\npackage-android：用 cargo-ndk 编 libjni_bridge.so（arm64-v8a，release）到 android/app/src/main/jniLibs。\n默认跑 gradlew assembleDebug（release .so + debug APK）；--release 则 assembleRelease（.so 与 APK 都 release）。\n--skip-gradle 只出 .so。"
+                "用法：\n  cargo xtask package-macos [--sign <证书名>]\n  cargo xtask install-macos  [--sign <证书名>] [--no-open]\n  cargo xtask icon\n  cargo xtask package-android [--release] [--skip-gradle]\n  cargo xtask package-windows\n\n签名：不传 --sign 时优先用本机 decktrace-dev 证书，找不到再退回 ad-hoc。\nad-hoc 每次构建签名都会变，macOS 会当成新应用，屏幕录制权限要重新授权。\n\npackage-android：用 cargo-ndk 编 libjni_bridge.so（arm64-v8a，release）到 android/app/src/main/jniLibs。\n默认跑 gradlew assembleDebug（release .so + debug APK）；--release 则 assembleRelease（.so 与 APK 都 release）。\n--skip-gradle 只出 .so。"
             );
             Ok(())
         }
         Some(other) => bail!(
-            "未知 xtask：{other}（可用：package-macos / install-macos / icon / package-android）"
+            "未知 xtask：{other}（可用：package-macos / install-macos / icon / package-android / package-windows）"
         ),
     }
 }
@@ -405,6 +406,62 @@ fn package_macos(sign_identity: Option<&str>) -> Result<()> {
         .arg(&app))?;
 
     println!("{}", app.display());
+    Ok(())
+}
+
+fn package_windows() -> Result<()> {
+    if !cfg!(target_os = "windows") {
+        bail!("package-windows 只能在 Windows 上运行");
+    }
+    let root = workspace_root();
+    run(Command::new(cargo())
+        .args(["build", "--release", "-p", "app"])
+        .current_dir(&root))?;
+
+    let out = root.join("dist").join("斗地主记牌器");
+    if out.exists() {
+        fs::remove_dir_all(&out)
+            .with_context(|| format!("删除旧产物失败：{}", out.display()))?;
+    }
+    let assets = out.join("assets");
+    fs::create_dir_all(&assets)?;
+
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| root.join("target"));
+    let exe = target_dir.join("release").join("decktrace.exe");
+    if !exe.is_file() {
+        bail!("找不到打包二进制：{}", exe.display());
+    }
+    fs::copy(&exe, out.join("decktrace.exe")).context("拷贝 exe 失败")?;
+
+    // 游戏 crate 约定：crates/<game>/src/profile.rs 且 <game> == GameProfile.id。
+    for entry in fs::read_dir(root.join("crates")).context("读取 crates 目录失败")? {
+        let path = entry?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !path.join("src/profile.rs").is_file() {
+            continue;
+        }
+        let source = path.join("assets");
+        if !source.is_dir() {
+            bail!("游戏 {name} 缺少资源目录：{}", source.display());
+        }
+        copy_dir(&source, &assets.join(name))?;
+    }
+
+    // GUI 牌面是应用资源，所有游戏共用。
+    let app_cards = root.join("crates/app/assets/gui/cards");
+    if !app_cards.is_dir() {
+        bail!("缺少 GUI 牌面素材：{}", app_cards.display());
+    }
+    copy_dir(&app_cards, &assets.join("cards"))?;
+
+    println!("{}", out.display());
     Ok(())
 }
 

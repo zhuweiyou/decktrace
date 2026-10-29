@@ -1,0 +1,133 @@
+name: Release
+
+# 仅手动填表触发：自动校验版本 -> 打 tag -> 三端构建 -> 上传产物到 GitHub Release。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号，格式 vX.Y.Z（例：v0.1.1）"
+        required: true
+        type: string
+      description:
+        description: "Release 说明（作为 GitHub Release 正文）"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version 必须形如 vX.Y.Z，收到：$VERSION"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag $VERSION 已存在"
+            exit 1
+          fi
+
+  build-macos:
+    needs: validate
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Package macOS
+        run: cargo xtask package-macos
+      - name: Zip app
+        run: |
+          cd dist
+          ditto -c -k --keepParent "斗地主记牌器.app" "斗地主记牌器-macos.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/斗地主记牌器-macos.zip
+          if-no-files-found: error
+
+  build-windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Package Windows
+        run: cargo xtask package-windows
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path "dist/斗地主记牌器/*" -DestinationPath "dist/斗地主记牌器-windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/斗地主记牌器-windows.zip
+          if-no-files-found: error
+
+  build-android:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK / rust target / cargo-ndk
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "ndk;27.2.12479018"
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --locked
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - name: Package Android
+        run: cargo xtask package-android --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: android/app/build/outputs/apk/release/王者斗地主辅助.apk
+          if-no-files-found: error
+
+  release:
+    needs: [build-macos, build-windows, build-android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.description }}
+        run: |
+          set -euo pipefail
+          TAG="$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG"
+          git push origin "$TAG"
+          echo "== 产物 =="; find dist -type f
+          gh release create "$TAG" --title "$TAG" --notes "$NOTES" \
+            "dist/macos/斗地主记牌器-macos.zip" \
+            "dist/windows/斗地主记牌器-windows.zip" \
+            "dist/android/王者斗地主辅助.apk"
