@@ -58,14 +58,14 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this);
-        title.setText("斗地主记牌器");
+        title.setText("王者斗地主辅助");
         title.setTextColor(0xFFFFFFFF);
         title.setTextSize(26);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         root.addView(title);
 
         TextView subtitle = new TextView(this);
-        subtitle.setText("选择游戏 · 自动识别 · 悬浮窗记牌");
+        subtitle.setText("王者荣耀斗地主 · 自动识别 · 悬浮窗记牌");
         subtitle.setTextColor(MUTED);
         subtitle.setTextSize(13);
         subtitle.setPadding(0, dp(4), 0, dp(16));
@@ -105,6 +105,12 @@ public class MainActivity extends Activity {
         // 第二组：选择游戏开始截屏
         LinearLayout card2 = card();
         card2.addView(sectionLabel("② 选择游戏开始截屏"));
+        TextView warn = new TextView(this);
+        warn.setText("⚠ 点开始后，系统弹窗务必选「单个应用」→ 再选「王者荣耀」；不要选全屏，否则会挡住/采集到其他界面");
+        warn.setTextColor(0xFFFFB86B);
+        warn.setTextSize(12);
+        warn.setPadding(dp(4), dp(2), dp(4), dp(10));
+        card2.addView(warn);
         card2.addView(gameButton("王者荣耀斗地主", "wzryddz"));
         TextView hint = new TextView(this);
         hint.setText("选中游戏后会请求屏幕采集授权");
@@ -205,7 +211,7 @@ public class MainActivity extends Activity {
             return;
         }
         pendingGame = gameId;
-        status.setText("请求屏幕采集授权（" + gameName(gameId) + "）…");
+        status.setText("请在系统弹窗选「单个应用」→「" + gameName(gameId) + "」…");
         Intent intent = mpm.createScreenCaptureIntent();
         startActivityForResult(intent, REQ_CAPTURE);
     }
