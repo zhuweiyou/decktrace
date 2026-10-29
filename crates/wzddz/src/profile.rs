@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Arc;
-
-use tracking::{BottomConfig, GameProfile};
+use tracking::GameProfile;
 use tracking::{JokerBand, RecognitionConfig, ResetConfig, WindowSelector};
 
 /// 资源根目录：优先环境变量，其次 .app 内的 Contents/Resources，最后开发目录。

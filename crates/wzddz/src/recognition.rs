@@ -304,6 +304,7 @@ impl WzddzRecognizer {
 
     /// 识别牌桌顶部的三张底牌（含已打出后的半透明样式）。
     /// 只在顶部小卡片区域工作，尺寸由亮列/亮行剖面确定，不依赖固定坐标。
+    #[allow(dead_code)]
     fn detect_bottom_cards(&self, image: &RgbImage) -> Vec<Detection> {
         let (width, height) = image.dimensions();
         let bx0 = (width as f32 * 0.42) as u32;
@@ -1110,6 +1111,7 @@ fn rank_above(mask: &GrayImage, cx: u32, cy: u32, cw: u32, ch: u32, scale: f32) 
     Some((bx0, by0, bx1 - bx0 + 1, by1 - by0 + 1))
 }
 
+#[allow(dead_code)]
 fn rank_bbox(mask: &GrayImage, sx: u32, sy: u32, sw: u32, sh: u32) -> Option<(u32, u32, u32, u32)> {
     let y0 = sy.saturating_sub((2.2 * sh as f32) as u32);
     let y1 = sy.saturating_sub(2);
